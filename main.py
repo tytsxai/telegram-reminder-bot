@@ -1,4 +1,5 @@
 """智能提醒机器人入口"""
+
 import asyncio
 import logging
 from telegram.ext import Application
@@ -8,8 +9,7 @@ from src.bot.handlers import register_handlers
 from src.services.scheduler import SchedulerService
 
 logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,7 @@ async def post_init(application: Application):
     global scheduler
     await db.init_db()
     logger.info("Database initialized")
-    
+
     scheduler = SchedulerService(db, send_reminder)
     scheduler.start()
     logger.info("Scheduler started")
@@ -41,10 +41,10 @@ async def main():
     if not settings.BOT_TOKEN:
         logger.error("BOT_TOKEN not configured")
         return
-    
+
     app = Application.builder().token(settings.BOT_TOKEN).post_init(post_init).build()
     register_handlers(app, db)
-    
+
     logger.info("Bot starting...")
     await app.run_polling()
 

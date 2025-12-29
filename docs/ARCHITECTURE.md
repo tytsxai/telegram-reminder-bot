@@ -61,7 +61,7 @@
 # src/config.py
 class Settings(BaseSettings):
     BOT_TOKEN: str
-    DATABASE_URL: str
+    DATABASE_PATH: str
     TIMEZONE: str
     AI_API_KEY: Optional[str]
 ```

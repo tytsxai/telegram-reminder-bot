@@ -39,10 +39,16 @@ pip install -r requirements.txt
 ```bash
 BOT_TOKEN=your_telegram_bot_token
 TIMEZONE=Asia/Shanghai
+DATABASE_PATH=reminders.db
 
 # AI 配置（可选）
 AI_API_KEY=your_api_key
 AI_MODEL=gpt-4
+```
+
+兼容旧配置（可选）：
+```
+DATABASE_URL=sqlite+aiosqlite:///./reminders.db
 ```
 
 ### 4. 运行
@@ -71,13 +77,15 @@ python main.py
 ```
 明天上午9点提醒我开会
 每天8点提醒我喝水
+每周一8点提醒我开会
+每月1号8点提醒我交房租
 后天下午3点提醒我买菜
 ```
 
 支持的时间词：
 - 日期：今天、明天、后天
 - 时间：X点、X点X分、上午/下午
-- 重复：每天、每周、每月
+- 重复：每天、每周一~周日、每月1号~31号
 
 ## 项目结构
 
@@ -99,6 +107,7 @@ python main.py
 
 ```bash
 # 运行所有测试
+pip install -r requirements-dev.txt
 pytest tests/ -v
 
 # 带覆盖率

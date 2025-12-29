@@ -22,6 +22,12 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
+开发/测试依赖：
+
+```bash
+pip install -r requirements-dev.txt
+```
+
 ### 4. 配置环境变量
 
 ```bash
@@ -67,6 +73,13 @@ src/
 - 函数/变量：snake_case
 - 常量：UPPER_CASE
 
+### 格式化与检查
+
+```bash
+black .
+ruff check src tests
+```
+
 ## 扩展开发
 
 ### 添加新命令
@@ -97,7 +110,8 @@ class OpenAIParser(AIParser):
 | 变量 | 必填 | 说明 |
 |------|------|------|
 | BOT_TOKEN | 是 | Telegram Bot Token |
-| DATABASE_URL | 否 | 数据库路径 |
+| DATABASE_PATH | 否 | 数据库路径 |
+| DATABASE_URL | 否 | 兼容旧配置（sqlite URL） |
 | TIMEZONE | 否 | 时区，默认 Asia/Shanghai |
 | AI_API_KEY | 否 | AI API 密钥 |
 | AI_MODEL | 否 | AI 模型名称 |

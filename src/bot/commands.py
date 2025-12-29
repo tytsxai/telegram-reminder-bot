@@ -1,24 +1,40 @@
 """命令处理模块"""
+
 from telegram import Update
 from telegram.ext import ContextTypes
 from src.database.db import Database
 from src.services.reminder import ReminderService
 from src.services.ai_parser import RuleBasedParser
+from src.models.reminder import RepeatType
 
 
 class CommandHandler:
     """命令处理器"""
-    
+
     def __init__(self, db: Database):
         self.db = db
         self.reminder_service = ReminderService(db)
         self.parser = RuleBasedParser()
-    
-    async def start(
-        self, 
-        update: Update, 
-        context: ContextTypes.DEFAULT_TYPE
-    ) -> None:
+
+    def _format_repeat(self, reminder) -> str:
+        if reminder.repeat_type == RepeatType.NONE:
+            return "不重复"
+        if reminder.repeat_type == RepeatType.DAILY:
+            return "每天"
+        if reminder.repeat_type == RepeatType.WEEKLY:
+            weekday_map = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+            if (
+                reminder.repeat_weekday is not None
+                and 0 <= reminder.repeat_weekday <= 6
+            ):
+                return f"每周{weekday_map[reminder.repeat_weekday]}"
+            return "每周"
+        if reminder.repeat_type == RepeatType.MONTHLY:
+            day = reminder.repeat_monthday or reminder.remind_at.day
+            return f"每月{day}号"
+        return "不重复"
+
+    async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """处理 /start 命令"""
         await update.message.reply_text(
             "👋 欢迎使用智能提醒机器人！\n\n"
@@ -28,124 +44,112 @@ class CommandHandler:
             "/delete <ID> - 删除提醒\n"
             "/help - 获取帮助"
         )
-    
-    async def help(
-        self, 
-        update: Update, 
-        context: ContextTypes.DEFAULT_TYPE
-    ) -> None:
+
+    async def help(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """处理 /help 命令"""
         await update.message.reply_text(
             "📖 使用帮助\n\n"
             "自然语言示例：\n"
             "• 明天上午9点提醒我开会\n"
             "• 每天8点提醒我喝水\n"
+            "• 每周一8点提醒我开会\n"
+            "• 每月1号8点提醒我交房租\n"
             "• 后天下午3点提醒我买菜"
         )
-    
-    async def remind(
-        self, 
-        update: Update, 
-        context: ContextTypes.DEFAULT_TYPE
-    ) -> None:
+
+    async def remind(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """处理 /remind 命令"""
         if not context.args:
             await update.message.reply_text("请输入提醒内容")
             return
-        
+
         text = " ".join(context.args)
         result = self.parser.parse(text)
-        
+
         if result is None:
             await update.message.reply_text(
-                "无法解析时间，请使用格式：\n"
-                "明天9点提醒我开会"
+                "无法解析时间，请使用格式：\n" "明天9点提醒我开会"
             )
             return
-        
+
         reminder = await self.reminder_service.create_reminder(
             user_id=update.effective_user.id,
             chat_id=update.effective_chat.id,
             content=result.content,
             remind_at=result.remind_at,
-            repeat_type=result.repeat_type
+            repeat_type=result.repeat_type,
+            repeat_weekday=result.repeat_weekday,
+            repeat_monthday=result.repeat_monthday,
         )
-        
+
         await update.message.reply_text(
             f"✅ 提醒已创建！\n"
             f"内容: {reminder.content}\n"
             f"时间: {reminder.remind_at.strftime('%Y-%m-%d %H:%M')}"
         )
-    
+
     async def list_reminders(
-        self, 
-        update: Update, 
-        context: ContextTypes.DEFAULT_TYPE
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
         """处理 /list 命令"""
         reminders = await self.reminder_service.get_user_reminders(
             update.effective_user.id
         )
-        
+
         if not reminders:
             await update.message.reply_text("📭 暂无提醒")
             return
-        
+
         lines = ["📋 提醒列表：\n"]
         for r in reminders:
             lines.append(
                 f"[{r.id}] {r.content}\n"
-                f"    ⏰ {r.remind_at.strftime('%m-%d %H:%M')}"
+                f"    ⏰ {r.remind_at.strftime('%Y-%m-%d %H:%M')} | 🔁 {self._format_repeat(r)}"
             )
-        
+
         await update.message.reply_text("\n".join(lines))
-    
-    async def delete(
-        self, 
-        update: Update, 
-        context: ContextTypes.DEFAULT_TYPE
-    ) -> None:
+
+    async def delete(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """处理 /delete 命令"""
         if not context.args:
             await update.message.reply_text("请输入提醒ID")
             return
-        
+
         try:
             reminder_id = int(context.args[0])
         except ValueError:
             await update.message.reply_text("ID必须是数字")
             return
-        
-        result = await self.reminder_service.delete_reminder(reminder_id)
+
+        result = await self.reminder_service.delete_reminder_by_user(
+            reminder_id, update.effective_user.id
+        )
         if result:
             await update.message.reply_text("✅ 提醒已删除")
         else:
-            await update.message.reply_text("❌ 提醒不存在")
-    
+            await update.message.reply_text("❌ 提醒不存在或无权删除")
+
     async def handle_message(
-        self, 
-        update: Update, 
-        context: ContextTypes.DEFAULT_TYPE
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
         """处理自然语言消息"""
         text = update.message.text
         result = self.parser.parse(text)
-        
+
         if result is None:
-            await update.message.reply_text(
-                "💡 试试这样说：\n"
-                "明天9点提醒我开会"
-            )
+            await update.message.reply_text("💡 试试这样说：\n" "明天9点提醒我开会")
             return
-        
+
         reminder = await self.reminder_service.create_reminder(
             user_id=update.effective_user.id,
             chat_id=update.effective_chat.id,
             content=result.content,
             remind_at=result.remind_at,
-            repeat_type=result.repeat_type
+            repeat_type=result.repeat_type,
+            repeat_weekday=result.repeat_weekday,
+            repeat_monthday=result.repeat_monthday,
         )
-        
+
         await update.message.reply_text(
             f"✅ 提醒已创建！\n"
             f"内容: {reminder.content}\n"

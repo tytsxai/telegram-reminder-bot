@@ -35,6 +35,8 @@ class RepeatType(str, Enum):
 | content | str | 提醒内容 |
 | remind_at | datetime | 提醒时间 |
 | repeat_type | RepeatType | 重复类型 |
+| repeat_weekday | int/None | 每周重复的星期（0=周一） |
+| repeat_monthday | int/None | 每月重复的日期（1-31） |
 | is_active | bool | 是否激活 |
 | created_at | datetime | 创建时间 |
 
@@ -71,6 +73,7 @@ db = Database(db_path="reminders.db")
 | `get_pending_reminders()` | - | List[Reminder] | 获取待发送提醒 |
 | `update_reminder()` | Reminder | bool | 更新提醒 |
 | `delete_reminder()` | id: int | bool | 删除提醒 |
+| `delete_reminder_by_user()` | id: int, user_id: int | bool | 按用户删除提醒 |
 
 **示例：**
 
@@ -110,6 +113,7 @@ service = ReminderService(db)
 | `get_reminder(id)` | 获取提醒 |
 | `get_user_reminders(user_id)` | 获取用户提醒 |
 | `delete_reminder(id)` | 删除提醒 |
+| `delete_reminder_by_user(id, user_id)` | 按用户删除提醒 |
 | `process_reminder(reminder)` | 处理提醒（重复逻辑） |
 
 ### SchedulerService 类
@@ -138,6 +142,8 @@ class ParseResult:
     content: str        # 提醒内容
     remind_at: datetime # 提醒时间
     repeat_type: RepeatType = RepeatType.NONE
+    repeat_weekday: Optional[int] = None
+    repeat_monthday: Optional[int] = None
 ```
 
 ### AIParser 抽象基类

@@ -106,3 +106,43 @@ class TestSettingsInstance:
         assert hasattr(settings, "BOT_TOKEN")
         assert hasattr(settings, "DATABASE_PATH")
         assert hasattr(settings, "TIMEZONE")
+
+    def test_scheduler_interval_invalid(self):
+        """测试非法调度间隔"""
+        with patch.dict(os.environ, {"SCHEDULER_INTERVAL_SECONDS": "0"}):
+            from src.config import Settings
+            with pytest.raises(Exception) as excinfo:
+                Settings()
+            assert "SCHEDULER_INTERVAL_SECONDS" in str(excinfo.value)
+
+    def test_healthcheck_port_invalid_low(self):
+        """测试非法端口号（过低）"""
+        with patch.dict(os.environ, {"HEALTHCHECK_PORT": "0"}):
+            from src.config import Settings
+            with pytest.raises(Exception) as excinfo:
+                Settings()
+            assert "HEALTHCHECK_PORT" in str(excinfo.value)
+
+    def test_healthcheck_port_invalid_high(self):
+        """测试非法端口号（过高）"""
+        with patch.dict(os.environ, {"HEALTHCHECK_PORT": "70000"}):
+            from src.config import Settings
+            with pytest.raises(Exception) as excinfo:
+                Settings()
+            assert "HEALTHCHECK_PORT" in str(excinfo.value)
+
+    def test_healthcheck_path_invalid(self):
+        """测试非法健康检查路径"""
+        with patch.dict(os.environ, {"HEALTHCHECK_PATH": "healthz"}):
+            from src.config import Settings
+            with pytest.raises(Exception) as excinfo:
+                Settings()
+            assert "HEALTHCHECK_PATH" in str(excinfo.value)
+
+    def test_instance_lock_path_empty(self):
+        """测试空实例锁路径"""
+        with patch.dict(os.environ, {"INSTANCE_LOCK_PATH": "   "}):
+            from src.config import Settings
+            with pytest.raises(Exception) as excinfo:
+                Settings()
+            assert "INSTANCE_LOCK_PATH" in str(excinfo.value)

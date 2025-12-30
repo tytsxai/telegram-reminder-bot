@@ -4,7 +4,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 from src.database.db import Database
 from src.services.reminder import ReminderService
-from src.services.ai_parser import RuleBasedParser
+from src.services.ai_parser import get_default_parser
 from src.models.reminder import RepeatType
 
 
@@ -14,7 +14,7 @@ class CommandHandler:
     def __init__(self, db: Database):
         self.db = db
         self.reminder_service = ReminderService(db)
-        self.parser = RuleBasedParser()
+        self.parser = get_default_parser()
 
     def _format_repeat(self, reminder) -> str:
         if reminder.repeat_type == RepeatType.NONE:

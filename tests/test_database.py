@@ -2,6 +2,7 @@
 
 import os
 import pytest
+import aiosqlite
 from datetime import timedelta
 from src.database.db import Database
 from src.models.reminder import Reminder, RepeatType
@@ -25,6 +26,20 @@ class TestDatabase:
     async def test_init_db(self, db):
         await db.init_db()
         assert os.path.exists(db.db_path)
+
+    @pytest.mark.asyncio
+    async def test_ping(self, db):
+        await db.init_db()
+        assert await db.ping() is True
+
+    @pytest.mark.asyncio
+    async def test_schema_version(self, db):
+        await db.init_db()
+        async with aiosqlite.connect(db.db_path) as conn:
+            cursor = await conn.execute("SELECT version FROM schema_version LIMIT 1")
+            row = await cursor.fetchone()
+            assert row is not None
+            assert int(row[0]) >= 1
 
     @pytest.mark.asyncio
     async def test_create_reminder(self, db):

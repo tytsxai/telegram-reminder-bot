@@ -32,6 +32,12 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
+生产环境建议使用锁定依赖：
+
+```bash
+pip install -r requirements.lock
+```
+
 ### 3. 配置
 
 创建 `.env` 文件：
@@ -44,12 +50,35 @@ DATABASE_PATH=reminders.db
 # AI 配置（可选）
 AI_API_KEY=your_api_key
 AI_MODEL=gpt-4
+AI_PROVIDER=siliconflow
+
+# OpenAI/Claude（可选）
+OPENAI_API_KEY=
+OPENAI_MODEL=
+ANTHROPIC_API_KEY=
+ANTHROPIC_MODEL=
+
+# 运行配置（可选）
+LOG_LEVEL=INFO
+SCHEDULER_INTERVAL_SECONDS=30
+
+# 监控端点（可选）
+HEALTHCHECK_ENABLED=false
+HEALTHCHECK_HOST=127.0.0.1
+HEALTHCHECK_PORT=8080
+HEALTHCHECK_PATH=/healthz
+
+# 实例锁（默认开启，防止重复运行）
+INSTANCE_LOCK_ENABLED=true
+INSTANCE_LOCK_PATH=reminder-bot.lock
 ```
 
 兼容旧配置（可选）：
 ```
 DATABASE_URL=sqlite+aiosqlite:///./reminders.db
 ```
+
+启用健康检查后，可通过 `http://127.0.0.1:8080/healthz` 进行探测。
 
 ### 4. 运行
 
@@ -83,7 +112,7 @@ python main.py
 ```
 
 支持的时间词：
-- 日期：今天、明天、后天
+- 日期：今天、明天、后天、下周X、具体日期（YYYY-MM-DD）
 - 时间：X点、X点X分、上午/下午
 - 重复：每天、每周一~周日、每月1号~31号
 
@@ -119,6 +148,10 @@ pytest tests/ -v --cov=src --cov-report=term
 - [API 文档](docs/API.md)
 - [架构设计](docs/ARCHITECTURE.md)
 - [开发指南](docs/DEVELOPMENT.md)
+- [部署指南](docs/DEPLOYMENT.md)
+- [故障排查](docs/TROUBLESHOOTING.md)
+- [运行手册](docs/OPERATIONS.md)
+- [变更记录](CHANGELOG.md)
 
 ## License
 

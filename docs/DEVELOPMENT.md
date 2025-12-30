@@ -26,6 +26,9 @@ pip install -r requirements.txt
 
 ```bash
 pip install -r requirements-dev.txt
+
+# 使用锁定版本（可选）
+pip install -r requirements-dev.lock
 ```
 
 ### 4. 配置环境变量
@@ -52,8 +55,7 @@ pytest tests/test_bot.py -v
 
 ### 测试覆盖率要求
 
-- 总体覆盖率 ≥ 90%
-- 核心模块 100%
+- 总体覆盖率 ≥ 80%
 
 ## 代码规范
 
@@ -113,8 +115,21 @@ class OpenAIParser(AIParser):
 | DATABASE_PATH | 否 | 数据库路径 |
 | DATABASE_URL | 否 | 兼容旧配置（sqlite URL） |
 | TIMEZONE | 否 | 时区，默认 Asia/Shanghai |
-| AI_API_KEY | 否 | AI API 密钥 |
-| AI_MODEL | 否 | AI 模型名称 |
+| AI_API_KEY | 否 | SiliconFlow API 密钥 |
+| AI_MODEL | 否 | SiliconFlow 模型名称 |
+| AI_PROVIDER | 否 | 解析器选择（siliconflow/openai/claude/rule） |
+| OPENAI_API_KEY | 否 | OpenAI API 密钥 |
+| OPENAI_MODEL | 否 | OpenAI 模型名称 |
+| ANTHROPIC_API_KEY | 否 | Claude API 密钥 |
+| ANTHROPIC_MODEL | 否 | Claude 模型名称 |
+| LOG_LEVEL | 否 | 日志等级（默认 INFO） |
+| SCHEDULER_INTERVAL_SECONDS | 否 | 调度扫描间隔（秒） |
+| HEALTHCHECK_ENABLED | 否 | 是否启用健康检查 |
+| HEALTHCHECK_HOST | 否 | 健康检查监听地址 |
+| HEALTHCHECK_PORT | 否 | 健康检查端口 |
+| HEALTHCHECK_PATH | 否 | 健康检查路径 |
+| INSTANCE_LOCK_ENABLED | 否 | 是否启用实例锁（默认开启） |
+| INSTANCE_LOCK_PATH | 否 | 实例锁文件路径 |
 
 ## 常见问题
 

@@ -74,6 +74,7 @@ db = Database(db_path="reminders.db")
 | `update_reminder()` | Reminder | bool | 更新提醒 |
 | `delete_reminder()` | id: int | bool | 删除提醒 |
 | `delete_reminder_by_user()` | id: int, user_id: int | bool | 按用户删除提醒 |
+| `ping()` | - | bool | 数据库连通性检查 |
 
 **示例：**
 
@@ -130,6 +131,22 @@ scheduler.start()
 | `start()` | 启动调度器 |
 | `stop()` | 停止调度器 |
 
+支持可选参数：`interval_seconds` 用于配置扫描间隔（秒）。
+
+### HealthCheckServer 类
+
+```python
+from src.services.healthcheck import HealthCheckServer
+
+server = HealthCheckServer(host="127.0.0.1", port=8080, path="/healthz")
+await server.start()
+```
+
+| 方法 | 说明 |
+|------|------|
+| `start()` | 启动健康检查 HTTP 服务 |
+| `stop()` | 停止健康检查服务 |
+
 ---
 
 ## AI 解析接口
@@ -160,8 +177,17 @@ class AIParser(ABC):
 | 类 | 说明 |
 |------|------|
 | `RuleBasedParser` | 基于正则的规则解析器 |
-| `OpenAIParser` | OpenAI 接口（预留） |
-| `ClaudeParser` | Claude 接口（预留） |
+| `SiliconFlowParser` | SiliconFlow/DeepSeek 解析器 |
+| `OpenAIParser` | OpenAI 解析器 |
+| `ClaudeParser` | Claude 解析器 |
+
+### 默认解析器选择
+
+```python
+from src.services.ai_parser import get_default_parser
+
+parser = get_default_parser()
+```
 
 ### 扩展 AI 解析器
 

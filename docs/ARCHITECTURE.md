@@ -23,6 +23,7 @@
 │  ┌──────────┐ ┌─────────┐ ┌─────────┐   │
 │  │ Reminder │ │Scheduler│ │AIParser │   │
 │  └──────────┘ └─────────┘ └─────────┘   │
+│            HealthCheck Server          │
 └─────────────────┬───────────────────────┘
                   │
 ┌─────────────────▼───────────────────────┐
@@ -45,6 +46,7 @@
 - **ReminderService**: 提醒业务逻辑
 - **SchedulerService**: 定时调度
 - **AIParser**: 自然语言解析
+- **HealthCheckServer**: 监控健康检查端点
 
 ### 3. Data Layer（数据层）
 
@@ -64,6 +66,9 @@ class Settings(BaseSettings):
     DATABASE_PATH: str
     TIMEZONE: str
     AI_API_KEY: Optional[str]
+    LOG_LEVEL: str
+    SCHEDULER_INTERVAL_SECONDS: int
+    HEALTHCHECK_ENABLED: bool
 ```
 
 ### 调度器流程
@@ -96,3 +101,9 @@ class Settings(BaseSettings):
 | 数据库 | SQLite + aiosqlite |
 | 配置 | pydantic-settings |
 | 测试 | pytest + pytest-asyncio |
+
+## 数据库迁移策略
+
+- 使用 `schema_version` 表记录数据库版本。
+- 启动时按版本依次应用迁移（补字段、创建索引）。
+- 新版本只追加迁移步骤，保证向后兼容。

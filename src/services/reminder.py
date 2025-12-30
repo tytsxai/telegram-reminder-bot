@@ -1,10 +1,14 @@
 """提醒服务模块"""
 
+import logging
 from datetime import datetime, timedelta
 from typing import List, Optional
+
 from src.database.db import Database
 from src.models.reminder import Reminder, RepeatType
 from src.utils.time_utils import add_months, now_in_timezone
+
+logger = logging.getLogger(__name__)
 
 
 class ReminderService:
@@ -37,7 +41,15 @@ class ReminderService:
             repeat_weekday=repeat_weekday,
             repeat_monthday=repeat_monthday,
         )
-        return await self.db.create_reminder(reminder)
+        created = await self.db.create_reminder(reminder)
+        logger.info(
+            "Created reminder id=%s user_id=%s chat_id=%s repeat=%s",
+            created.id,
+            user_id,
+            chat_id,
+            created.repeat_type.value,
+        )
+        return created
 
     async def get_reminder(self, reminder_id: int) -> Optional[Reminder]:
         """获取提醒"""

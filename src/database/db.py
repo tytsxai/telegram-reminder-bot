@@ -17,6 +17,15 @@ class Database:
             db_path = settings.DATABASE_PATH
         self.db_path = db_path
 
+    async def ping(self) -> bool:
+        """检查数据库连通性"""
+        try:
+            async with aiosqlite.connect(self.db_path) as db:
+                await db.execute("SELECT 1")
+            return True
+        except Exception:
+            return False
+
     async def init_db(self) -> None:
         """初始化数据库表"""
         async with aiosqlite.connect(self.db_path) as db:
@@ -36,8 +45,38 @@ class Database:
                 )
             """
             )
-            await self._ensure_columns(db)
+            await self._apply_migrations(db)
             await db.commit()
+
+    async def _apply_migrations(self, db: aiosqlite.Connection) -> None:
+        """按版本应用迁移"""
+        current = await self._get_schema_version(db)
+        if current < 1:
+            await self._ensure_columns(db)
+            await self._set_schema_version(db, 1)
+            current = 1
+        if current < 2:
+            await self._create_indexes(db)
+            await self._set_schema_version(db, 2)
+
+    async def _get_schema_version(self, db: aiosqlite.Connection) -> int:
+        """读取当前数据库版本"""
+        await db.execute(
+            "CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)"
+        )
+        cursor = await db.execute("SELECT version FROM schema_version LIMIT 1")
+        row = await cursor.fetchone()
+        if row is None:
+            await db.execute("INSERT INTO schema_version (version) VALUES (0)")
+            return 0
+        try:
+            return int(row[0])
+        except (TypeError, ValueError):
+            return 0
+
+    async def _set_schema_version(self, db: aiosqlite.Connection, version: int) -> None:
+        """更新数据库版本"""
+        await db.execute("UPDATE schema_version SET version = ?", (version,))
 
     async def _ensure_columns(self, db: aiosqlite.Connection) -> None:
         """为旧表补充新增字段"""
@@ -48,6 +87,16 @@ class Database:
             await db.execute("ALTER TABLE reminders ADD COLUMN repeat_weekday INTEGER")
         if "repeat_monthday" not in existing:
             await db.execute("ALTER TABLE reminders ADD COLUMN repeat_monthday INTEGER")
+
+    async def _create_indexes(self, db: aiosqlite.Connection) -> None:
+        """创建常用索引"""
+        await db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_reminders_active_remind_at "
+            "ON reminders (is_active, remind_at)"
+        )
+        await db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_reminders_user_id ON reminders (user_id)"
+        )
 
     async def create_reminder(self, reminder: Reminder) -> Reminder:
         """创建提醒"""

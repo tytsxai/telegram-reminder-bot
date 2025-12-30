@@ -7,15 +7,27 @@ from src.config import settings
 from src.database.db import Database
 from src.bot.handlers import register_handlers
 from src.services.scheduler import SchedulerService
+from src.services.healthcheck import HealthCheckServer
+from src.utils.instance_lock import InstanceLock
 
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
-)
+
+def setup_logging() -> None:
+    """配置日志输出"""
+    level_name = (settings.LOG_LEVEL or "INFO").upper()
+    level = getattr(logging, level_name, logging.INFO)
+    logging.basicConfig(
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=level
+    )
+
+
+setup_logging()
 logger = logging.getLogger(__name__)
 
 # 全局数据库实例
 db = Database()
 scheduler = None
+health_server = None
+instance_lock = None
 
 
 async def send_reminder(chat_id: int, message: str):
@@ -26,7 +38,7 @@ async def send_reminder(chat_id: int, message: str):
 
 async def post_init(application: Application):
     """应用初始化后的回调"""
-    global scheduler
+    global scheduler, health_server
     await db.init_db()
     logger.info("Database initialized")
 
@@ -34,15 +46,56 @@ async def post_init(application: Application):
     scheduler.start()
     logger.info("Scheduler started")
 
+    if settings.HEALTHCHECK_ENABLED:
+
+        async def _health_check():
+            ok = await db.ping()
+            return {"ok": ok, "status": "ok" if ok else "db_error"}
+
+        health_server = HealthCheckServer(
+            host=settings.HEALTHCHECK_HOST,
+            port=settings.HEALTHCHECK_PORT,
+            path=settings.HEALTHCHECK_PATH,
+            check=_health_check,
+        )
+        await health_server.start()
+        logger.info("Healthcheck started")
+
+
+async def post_shutdown(application: Application):
+    """应用关闭后的回调"""
+    global scheduler, health_server, instance_lock
+    if scheduler:
+        scheduler.stop()
+        scheduler = None
+    if health_server:
+        await health_server.stop()
+        health_server = None
+    if instance_lock:
+        instance_lock.release()
+        instance_lock = None
+
 
 async def main():
     """主函数"""
-    global app
+    global app, instance_lock
     if not settings.BOT_TOKEN:
         logger.error("BOT_TOKEN not configured")
         return
 
-    app = Application.builder().token(settings.BOT_TOKEN).post_init(post_init).build()
+    if settings.INSTANCE_LOCK_ENABLED:
+        instance_lock = InstanceLock(settings.INSTANCE_LOCK_PATH)
+        if not instance_lock.acquire():
+            logger.error("Another instance is running. Exiting.")
+            return
+
+    app = (
+        Application.builder()
+        .token(settings.BOT_TOKEN)
+        .post_init(post_init)
+        .post_shutdown(post_shutdown)
+        .build()
+    )
     register_handlers(app, db)
 
     logger.info("Bot starting...")

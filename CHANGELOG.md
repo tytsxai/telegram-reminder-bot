@@ -1,5 +1,21 @@
 # 变更记录
 
+## [0.3.0] - 2025-12-31
+
+### Added
+- 调度批量/锁定/并发配置项
+- Docker 部署文件（Dockerfile / docker-compose / .dockerignore）
+- 提醒锁与发送时间字段（locked_until / last_sent_at / last_sent_for）
+
+### Changed
+- 调度器改为批量领取+锁定，避免并发重复发送
+- 启动时注册 Telegram 命令列表
+- 删除提醒时限定 chat_id，避免跨会话误删
+- 时间存储统一为 UTC（含迁移）
+
+### Fixed
+- 明确日期但已过期的提醒解析返回失败
+
 ## [0.2.1] - 2025-12-30
 
 ### Added

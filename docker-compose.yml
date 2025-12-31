@@ -1,0 +1,14 @@
+name: telegram-reminder-bot
+
+services:
+  app:
+    image: telegram-reminder-bot-app:${IMAGE_TAG}
+    container_name: telegram-reminder-bot-app
+    env_file: .env
+    restart: unless-stopped
+    networks:
+      - telegram-reminder-bot-network
+
+networks:
+  telegram-reminder-bot-network:
+    name: telegram-reminder-bot-network

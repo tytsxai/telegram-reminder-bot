@@ -1,6 +1,5 @@
 """智能提醒机器人入口"""
 
-import asyncio
 import logging
 from telegram.ext import Application
 from src.config import settings
@@ -76,7 +75,7 @@ async def post_shutdown(application: Application):
         instance_lock = None
 
 
-async def main():
+def main():
     """主函数"""
     global app, instance_lock
     if not settings.BOT_TOKEN:
@@ -99,8 +98,13 @@ async def main():
     register_handlers(app, db)
 
     logger.info("Bot starting...")
-    await app.run_polling()
+    try:
+        app.run_polling()
+    finally:
+        if instance_lock:
+            instance_lock.release()
+            instance_lock = None
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

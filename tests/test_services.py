@@ -170,3 +170,21 @@ class TestSchedulerService:
         await db.create_reminder(r)
         await scheduler._check_reminders()
         assert len(sent) == 1
+
+    @pytest.mark.asyncio
+    async def test_check_reminders_forbidden_deactivates(self, db):
+        await db.init_db()
+
+        async def callback(chat_id, msg):
+            from telegram.error import Forbidden
+
+            raise Forbidden("blocked")
+
+        scheduler = SchedulerService(db, callback)
+        past = now_in_timezone() - timedelta(hours=1)
+        r = Reminder(user_id=123, chat_id=456, content="过期", remind_at=past)
+        created = await db.create_reminder(r)
+        await scheduler._check_reminders()
+        updated = await db.get_reminder(created.id)
+        assert updated is not None
+        assert updated.is_active is False

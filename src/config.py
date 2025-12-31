@@ -53,6 +53,9 @@ class Settings(BaseSettings):
     # 运行与监控配置
     LOG_LEVEL: str = "INFO"
     SCHEDULER_INTERVAL_SECONDS: int = 30
+    SCHEDULER_BATCH_SIZE: int = 200
+    SCHEDULER_LOCK_SECONDS: int = 120
+    SCHEDULER_SEND_CONCURRENCY: int = 5
     HEALTHCHECK_ENABLED: bool = False
     HEALTHCHECK_HOST: str = "127.0.0.1"
     HEALTHCHECK_PORT: int = 8080
@@ -72,6 +75,12 @@ class Settings(BaseSettings):
             raise ValueError(f"Invalid TIMEZONE: {self.TIMEZONE}") from exc
         if self.SCHEDULER_INTERVAL_SECONDS <= 0:
             raise ValueError("SCHEDULER_INTERVAL_SECONDS must be > 0")
+        if self.SCHEDULER_BATCH_SIZE <= 0:
+            raise ValueError("SCHEDULER_BATCH_SIZE must be > 0")
+        if self.SCHEDULER_LOCK_SECONDS <= 0:
+            raise ValueError("SCHEDULER_LOCK_SECONDS must be > 0")
+        if self.SCHEDULER_SEND_CONCURRENCY <= 0:
+            raise ValueError("SCHEDULER_SEND_CONCURRENCY must be > 0")
         if not (1 <= self.HEALTHCHECK_PORT <= 65535):
             raise ValueError("HEALTHCHECK_PORT must be between 1 and 65535")
         if not self.HEALTHCHECK_PATH.startswith("/"):

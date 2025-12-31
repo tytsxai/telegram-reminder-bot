@@ -55,9 +55,11 @@ class ReminderService:
         """获取提醒"""
         return await self.db.get_reminder(reminder_id)
 
-    async def get_user_reminders(self, user_id: int) -> List[Reminder]:
+    async def get_user_reminders(
+        self, user_id: int, chat_id: Optional[int] = None
+    ) -> List[Reminder]:
         """获取用户所有提醒"""
-        return await self.db.get_user_reminders(user_id)
+        return await self.db.get_user_reminders(user_id, chat_id)
 
     async def delete_reminder(self, reminder_id: int) -> bool:
         """删除提醒"""
@@ -67,8 +69,20 @@ class ReminderService:
         """删除指定用户的提醒（带权限校验）"""
         return await self.db.delete_reminder_by_user(reminder_id, user_id)
 
-    async def process_reminder(self, reminder: Reminder) -> Optional[datetime]:
+    async def process_reminder(
+        self,
+        reminder: Reminder,
+        sent_at: Optional[datetime] = None,
+        sent_for: Optional[datetime] = None,
+        release_lock: bool = True,
+    ) -> Optional[datetime]:
         """处理提醒，返回下次提醒时间（如果是重复提醒）"""
+        if sent_at is not None:
+            reminder.last_sent_at = sent_at
+        if sent_for is not None:
+            reminder.last_sent_for = sent_for
+        if release_lock:
+            reminder.locked_until = None
         if reminder.repeat_type == RepeatType.NONE:
             reminder.is_active = False
             await self.db.update_reminder(reminder)

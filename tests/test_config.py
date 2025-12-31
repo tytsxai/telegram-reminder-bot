@@ -18,6 +18,7 @@ class TestSettings:
             "OPENAI_API_KEY", "OPENAI_MODEL", "OPENAI_BASE_URL",
             "ANTHROPIC_API_KEY", "ANTHROPIC_MODEL", "ANTHROPIC_BASE_URL",
             "LOG_LEVEL", "SCHEDULER_INTERVAL_SECONDS",
+            "SCHEDULER_BATCH_SIZE", "SCHEDULER_LOCK_SECONDS", "SCHEDULER_SEND_CONCURRENCY",
             "HEALTHCHECK_ENABLED", "HEALTHCHECK_HOST", "HEALTHCHECK_PORT", "HEALTHCHECK_PATH",
         ]
         clean_env = {k: "" for k in env_keys if k in os.environ}
@@ -27,7 +28,7 @@ class TestSettings:
                 os.environ.pop(k, None)
             from src.config import Settings
 
-            s = Settings()
+            s = Settings(_env_file=None)
         assert s.BOT_TOKEN == ""
         assert s.DATABASE_PATH == "reminders.db"
         assert s.DATABASE_URL is None
@@ -44,6 +45,9 @@ class TestSettings:
         assert s.ANTHROPIC_BASE_URL is None
         assert s.LOG_LEVEL == "INFO"
         assert s.SCHEDULER_INTERVAL_SECONDS == 30
+        assert s.SCHEDULER_BATCH_SIZE == 200
+        assert s.SCHEDULER_LOCK_SECONDS == 120
+        assert s.SCHEDULER_SEND_CONCURRENCY == 5
         assert s.HEALTHCHECK_ENABLED is False
         assert s.HEALTHCHECK_HOST == "127.0.0.1"
         assert s.HEALTHCHECK_PORT == 8080
@@ -114,6 +118,30 @@ class TestSettingsInstance:
             with pytest.raises(Exception) as excinfo:
                 Settings()
             assert "SCHEDULER_INTERVAL_SECONDS" in str(excinfo.value)
+
+    def test_scheduler_batch_size_invalid(self):
+        """测试非法调度批量大小"""
+        with patch.dict(os.environ, {"SCHEDULER_BATCH_SIZE": "0"}):
+            from src.config import Settings
+            with pytest.raises(Exception) as excinfo:
+                Settings()
+            assert "SCHEDULER_BATCH_SIZE" in str(excinfo.value)
+
+    def test_scheduler_lock_seconds_invalid(self):
+        """测试非法调度锁定时长"""
+        with patch.dict(os.environ, {"SCHEDULER_LOCK_SECONDS": "0"}):
+            from src.config import Settings
+            with pytest.raises(Exception) as excinfo:
+                Settings()
+            assert "SCHEDULER_LOCK_SECONDS" in str(excinfo.value)
+
+    def test_scheduler_send_concurrency_invalid(self):
+        """测试非法发送并发数"""
+        with patch.dict(os.environ, {"SCHEDULER_SEND_CONCURRENCY": "0"}):
+            from src.config import Settings
+            with pytest.raises(Exception) as excinfo:
+                Settings()
+            assert "SCHEDULER_SEND_CONCURRENCY" in str(excinfo.value)
 
     def test_healthcheck_port_invalid_low(self):
         """测试非法端口号（过低）"""

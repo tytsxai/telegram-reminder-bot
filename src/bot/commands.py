@@ -93,7 +93,7 @@ class CommandHandler:
     ) -> None:
         """处理 /list 命令"""
         reminders = await self.reminder_service.get_user_reminders(
-            update.effective_user.id
+            update.effective_user.id, update.effective_chat.id
         )
 
         if not reminders:

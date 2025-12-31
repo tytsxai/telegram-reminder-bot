@@ -28,6 +28,13 @@ class TestDatabase:
         assert os.path.exists(db.db_path)
 
     @pytest.mark.asyncio
+    async def test_init_db_creates_directory(self, tmp_path):
+        db_path = tmp_path / "data" / "test.db"
+        db = Database(str(db_path))
+        await db.init_db()
+        assert db_path.exists()
+
+    @pytest.mark.asyncio
     async def test_ping(self, db):
         await db.init_db()
         assert await db.ping() is True
@@ -82,6 +89,20 @@ class TestDatabase:
         assert len(results) == 2
 
     @pytest.mark.asyncio
+    async def test_get_user_reminders_by_chat(self, db):
+        await db.init_db()
+        r1 = Reminder(
+            user_id=123, chat_id=456, content="1", remind_at=now_in_timezone()
+        )
+        r2 = Reminder(
+            user_id=123, chat_id=789, content="2", remind_at=now_in_timezone()
+        )
+        await db.create_reminder(r1)
+        await db.create_reminder(r2)
+        results = await db.get_user_reminders(123, chat_id=456)
+        assert len(results) == 1
+
+    @pytest.mark.asyncio
     async def test_get_pending_reminders(self, db):
         await db.init_db()
         past = now_in_timezone() - timedelta(hours=1)
@@ -89,6 +110,19 @@ class TestDatabase:
         await db.create_reminder(r)
         results = await db.get_pending_reminders()
         assert len(results) >= 1
+
+    @pytest.mark.asyncio
+    async def test_claim_pending_reminders(self, db):
+        await db.init_db()
+        past = now_in_timezone() - timedelta(hours=1)
+        r1 = Reminder(user_id=123, chat_id=456, content="a", remind_at=past)
+        r2 = Reminder(user_id=123, chat_id=456, content="b", remind_at=past)
+        await db.create_reminder(r1)
+        await db.create_reminder(r2)
+        batch1 = await db.claim_pending_reminders(limit=1, lock_seconds=60)
+        assert len(batch1) == 1
+        batch2 = await db.claim_pending_reminders(limit=10, lock_seconds=60)
+        assert len(batch2) == 1
 
     @pytest.mark.asyncio
     async def test_update_reminder(self, db):

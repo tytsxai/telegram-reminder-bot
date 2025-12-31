@@ -120,6 +120,13 @@ class TestRuleBasedParser:
         assert result is not None
         assert result.remind_at == datetime(2025, 1, 5, 9, 0, 0)
 
+    def test_parse_past_explicit_date_rejected(self, monkeypatch):
+        fixed_now = datetime(2025, 1, 2, 10, 0, 0)
+        monkeypatch.setattr(RuleBasedParser, "_get_now", lambda self: fixed_now)
+        parser = RuleBasedParser()
+        result = parser.parse("2024-12-31 9点提醒我开会")
+        assert result is None
+
 
 class TestOpenAIParser:
     """OpenAIParser 测试"""

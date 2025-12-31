@@ -99,6 +99,7 @@ class RuleBasedParser(AIParser):
         repeat_weekday = None
         repeat_monthday = None
         content = text
+        explicit_date = False
 
         # 解析重复类型
         if "每天" in text or "每日" in text:
@@ -134,8 +135,11 @@ class RuleBasedParser(AIParser):
             weekday = self._WEEKDAY_MAP[next_week_match.group(1)]
             remind_at = self._next_weekday(now, weekday, now.hour, now.minute)
 
-        date_match = re.search(r"(\d{4})[年/\-](\d{1,2})[月/\-](\d{1,2})[日号]?", text)
+        date_match = re.search(
+            r"(\d{4})[年/\-](\d{1,2})[月/\-](\d{1,2})[日号]?", text
+        )
         if date_match:
+            explicit_date = True
             year, month, day = map(int, date_match.groups())
             try:
                 remind_at = datetime(year, month, day)
@@ -174,6 +178,8 @@ class RuleBasedParser(AIParser):
                 remind_at = add_months(remind_at, 1, target_day=repeat_monthday)
         elif repeat_type in (RepeatType.DAILY, RepeatType.NONE):
             if remind_at <= now:
+                if repeat_type == RepeatType.NONE and explicit_date:
+                    return None
                 remind_at = remind_at + timedelta(days=1)
 
         return ParseResult(
@@ -486,6 +492,11 @@ class LLMJSONParser(AIParser):
                 repeat_type = RepeatType.MONTHLY
 
         now = self._get_now()
+        explicit_date = bool(
+            re.search(r"\d{4}[年/\-]\d{1,2}[月/\-]\d{1,2}", text)
+        )
+        if repeat_type == RepeatType.NONE and explicit_date and remind_at <= now:
+            return None
         remind_at, repeat_weekday, repeat_monthday = self._normalize_result(
             now, remind_at, repeat_type, repeat_weekday, repeat_monthday
         )

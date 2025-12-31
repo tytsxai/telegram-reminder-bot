@@ -65,9 +65,11 @@ class ReminderService:
         """删除提醒"""
         return await self.db.delete_reminder(reminder_id)
 
-    async def delete_reminder_by_user(self, reminder_id: int, user_id: int) -> bool:
-        """删除指定用户的提醒（带权限校验）"""
-        return await self.db.delete_reminder_by_user(reminder_id, user_id)
+    async def delete_reminder_by_user(
+        self, reminder_id: int, user_id: int, chat_id: Optional[int] = None
+    ) -> bool:
+        """删除指定用户的提醒（带权限校验，可选限定 chat）"""
+        return await self.db.delete_reminder_by_user(reminder_id, user_id, chat_id)
 
     async def process_reminder(
         self,

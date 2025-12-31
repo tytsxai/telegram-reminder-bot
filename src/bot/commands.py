@@ -122,7 +122,7 @@ class CommandHandler:
             return
 
         result = await self.reminder_service.delete_reminder_by_user(
-            reminder_id, update.effective_user.id
+            reminder_id, update.effective_user.id, update.effective_chat.id
         )
         if result:
             await update.message.reply_text("✅ 提醒已删除")

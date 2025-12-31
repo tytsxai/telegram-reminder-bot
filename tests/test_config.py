@@ -17,7 +17,7 @@ class TestSettings:
             "AI_API_KEY", "AI_MODEL", "AI_BASE_URL", "AI_PROVIDER",
             "OPENAI_API_KEY", "OPENAI_MODEL", "OPENAI_BASE_URL",
             "ANTHROPIC_API_KEY", "ANTHROPIC_MODEL", "ANTHROPIC_BASE_URL",
-            "LOG_LEVEL", "SCHEDULER_INTERVAL_SECONDS",
+            "LOG_LEVEL", "SCHEDULER_INTERVAL_SECONDS", "IMAGE_TAG",
             "SCHEDULER_BATCH_SIZE", "SCHEDULER_LOCK_SECONDS", "SCHEDULER_SEND_CONCURRENCY",
             "HEALTHCHECK_ENABLED", "HEALTHCHECK_HOST", "HEALTHCHECK_PORT", "HEALTHCHECK_PATH",
         ]
@@ -48,6 +48,7 @@ class TestSettings:
         assert s.SCHEDULER_BATCH_SIZE == 200
         assert s.SCHEDULER_LOCK_SECONDS == 120
         assert s.SCHEDULER_SEND_CONCURRENCY == 5
+        assert s.IMAGE_TAG is None
         assert s.HEALTHCHECK_ENABLED is False
         assert s.HEALTHCHECK_HOST == "127.0.0.1"
         assert s.HEALTHCHECK_PORT == 8080

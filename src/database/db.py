@@ -357,13 +357,21 @@ class Database:
             await db.commit()
             return cursor.rowcount > 0
 
-    async def delete_reminder_by_user(self, reminder_id: int, user_id: int) -> bool:
-        """删除指定用户的提醒（带权限校验）"""
+    async def delete_reminder_by_user(
+        self, reminder_id: int, user_id: int, chat_id: Optional[int] = None
+    ) -> bool:
+        """删除指定用户的提醒（带权限校验，可选限定 chat）"""
         async with self._connect() as db:
-            cursor = await db.execute(
-                "DELETE FROM reminders WHERE id = ? AND user_id = ?",
-                (reminder_id, user_id),
-            )
+            if chat_id is None:
+                cursor = await db.execute(
+                    "DELETE FROM reminders WHERE id = ? AND user_id = ?",
+                    (reminder_id, user_id),
+                )
+            else:
+                cursor = await db.execute(
+                    "DELETE FROM reminders WHERE id = ? AND user_id = ? AND chat_id = ?",
+                    (reminder_id, user_id, chat_id),
+                )
             await db.commit()
             return cursor.rowcount > 0
 

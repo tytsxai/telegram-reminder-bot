@@ -56,6 +56,7 @@ class Settings(BaseSettings):
     SCHEDULER_BATCH_SIZE: int = 200
     SCHEDULER_LOCK_SECONDS: int = 120
     SCHEDULER_SEND_CONCURRENCY: int = 5
+    IMAGE_TAG: Optional[str] = None
     HEALTHCHECK_ENABLED: bool = False
     HEALTHCHECK_HOST: str = "127.0.0.1"
     HEALTHCHECK_PORT: int = 8080

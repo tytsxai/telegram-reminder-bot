@@ -2,6 +2,7 @@
 
 import logging
 from telegram.ext import Application
+from telegram import BotCommand
 from src.config import settings
 from src.database.db import Database
 from src.bot.handlers import register_handlers
@@ -40,6 +41,20 @@ async def post_init(application: Application):
     global scheduler, health_server
     await db.init_db()
     logger.info("Database initialized")
+
+    try:
+        await application.bot.set_my_commands(
+            [
+                BotCommand("start", "启动机器人"),
+                BotCommand("help", "使用帮助"),
+                BotCommand("remind", "设置提醒"),
+                BotCommand("list", "查看提醒列表"),
+                BotCommand("delete", "删除提醒"),
+            ]
+        )
+        logger.info("Bot commands registered")
+    except Exception as exc:
+        logger.warning("Failed to register bot commands: %s", exc)
 
     scheduler = SchedulerService(db, send_reminder)
     scheduler.start()

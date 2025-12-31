@@ -172,7 +172,7 @@ class TestDatabase:
             user_id=123, chat_id=456, content="删除", remind_at=now_in_timezone()
         )
         created = await db.create_reminder(r)
-        result = await db.delete_reminder_by_user(created.id, 123)
+        result = await db.delete_reminder_by_user(created.id, 123, 456)
         assert result is True
 
     @pytest.mark.asyncio
@@ -183,7 +183,18 @@ class TestDatabase:
             user_id=123, chat_id=456, content="删除", remind_at=now_in_timezone()
         )
         created = await db.create_reminder(r)
-        result = await db.delete_reminder_by_user(created.id, 999)
+        result = await db.delete_reminder_by_user(created.id, 999, 456)
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_delete_reminder_by_user_wrong_chat(self, db):
+        """测试按用户删除提醒失败（chat 不匹配）"""
+        await db.init_db()
+        r = Reminder(
+            user_id=123, chat_id=456, content="删除", remind_at=now_in_timezone()
+        )
+        created = await db.create_reminder(r)
+        result = await db.delete_reminder_by_user(created.id, 123, 789)
         assert result is False
 
     @pytest.mark.asyncio

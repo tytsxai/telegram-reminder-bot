@@ -66,7 +66,7 @@ class TestReminderService:
         await db.init_db()
         service = ReminderService(db)
         created = await service.create_reminder(123, 456, "删除", now_in_timezone())
-        result = await service.delete_reminder_by_user(created.id, 123)
+        result = await service.delete_reminder_by_user(created.id, 123, 456)
         assert result is True
 
     @pytest.mark.asyncio

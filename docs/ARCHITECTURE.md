@@ -68,28 +68,27 @@ class Settings(BaseSettings):
     AI_API_KEY: Optional[str]
     LOG_LEVEL: str
     SCHEDULER_INTERVAL_SECONDS: int
+    SCHEDULER_BATCH_SIZE: int
+    SCHEDULER_LOCK_SECONDS: int
+    SCHEDULER_SEND_CONCURRENCY: int
     HEALTHCHECK_ENABLED: bool
 ```
 
 ### 调度器流程
 
 ```
-┌──────────┐    30s     ┌─────────────┐
-│Scheduler │──────────▶│check_pending│
-└──────────┘            └──────┬──────┘
-                               │
-                    ┌──────────▼──────────┐
-                    │  get_pending_reminders│
-                    └──────────┬──────────┘
-                               │
-                    ┌──────────▼──────────┐
-                    │   send_reminder     │
-                    └──────────┬──────────┘
-                               │
-                    ┌──────────▼──────────┐
-                    │  process_reminder   │
-                    │  (handle repeat)    │
-                    └─────────────────────┘
+┌──────────┐   interval   ┌──────────────────────┐
+│Scheduler │────────────▶│claim_pending_reminders│
+└──────────┘              └──────────┬───────────┘
+                                    │ (lock + batch)
+                         ┌──────────▼───────────┐
+                         │ send_reminder (fanout)│
+                         └──────────┬───────────┘
+                                    │
+                         ┌──────────▼───────────┐
+                         │  process_reminder    │
+                         │  (handle repeat)     │
+                         └──────────────────────┘
 ```
 
 ## 技术栈

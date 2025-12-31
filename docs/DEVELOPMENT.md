@@ -124,6 +124,9 @@ class OpenAIParser(AIParser):
 | ANTHROPIC_MODEL | 否 | Claude 模型名称 |
 | LOG_LEVEL | 否 | 日志等级（默认 INFO） |
 | SCHEDULER_INTERVAL_SECONDS | 否 | 调度扫描间隔（秒） |
+| SCHEDULER_BATCH_SIZE | 否 | 单次调度批量领取条数 |
+| SCHEDULER_LOCK_SECONDS | 否 | 调度锁定时长（秒） |
+| SCHEDULER_SEND_CONCURRENCY | 否 | 并发发送上限 |
 | HEALTHCHECK_ENABLED | 否 | 是否启用健康检查 |
 | HEALTHCHECK_HOST | 否 | 健康检查监听地址 |
 | HEALTHCHECK_PORT | 否 | 健康检查端口 |

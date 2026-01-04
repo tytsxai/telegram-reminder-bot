@@ -315,14 +315,20 @@ class Database:
                     (lock_until, *ids),
                 )
             await db.commit()
-            return [self._row_to_reminder(dict(row)) for row in rows]
+            reminders = [self._row_to_reminder(dict(row)) for row in rows]
+            # 保持内存态锁与 DB 一致，避免刚领取就被再次认领。
+            if ids:
+                locked_local = from_utc_iso(lock_until)
+                for reminder in reminders:
+                    reminder.locked_until = locked_local
+            return reminders
 
     async def update_reminder(self, reminder: Reminder) -> bool:
         """更新提醒"""
         if reminder.id is None:
             return False
         async with self._connect() as db:
-            await db.execute(
+            cursor = await db.execute(
                 """UPDATE reminders SET content=?, remind_at=?, 
                    repeat_type=?, repeat_weekday=?, repeat_monthday=?,
                    locked_until=?, last_sent_at=?, last_sent_for=?, is_active=? WHERE id=?""",
@@ -346,7 +352,7 @@ class Database:
                 ),
             )
             await db.commit()
-            return True
+            return cursor.rowcount > 0
 
     async def delete_reminder(self, reminder_id: int) -> bool:
         """删除提醒"""

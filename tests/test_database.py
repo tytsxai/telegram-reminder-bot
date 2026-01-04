@@ -121,6 +121,7 @@ class TestDatabase:
         await db.create_reminder(r2)
         batch1 = await db.claim_pending_reminders(limit=1, lock_seconds=60)
         assert len(batch1) == 1
+        assert batch1[0].locked_until is not None
         batch2 = await db.claim_pending_reminders(limit=10, lock_seconds=60)
         assert len(batch2) == 1
 
@@ -143,6 +144,16 @@ class TestDatabase:
         r = Reminder(
             user_id=123, chat_id=456, content="无ID", remind_at=now_in_timezone()
         )
+        result = await db.update_reminder(r)
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_update_reminder_missing_row(self, db):
+        await db.init_db()
+        r = Reminder(
+            user_id=123, chat_id=456, content="不存在", remind_at=now_in_timezone()
+        )
+        r.id = 999999
         result = await db.update_reminder(r)
         assert result is False
 

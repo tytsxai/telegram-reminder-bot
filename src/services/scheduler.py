@@ -2,9 +2,10 @@
 
 import asyncio
 import logging
+from datetime import timedelta
 from typing import Awaitable, Callable, Optional
 
-from telegram.error import Forbidden
+from telegram.error import Forbidden, RetryAfter
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from src.config import settings
@@ -62,6 +63,7 @@ class SchedulerService:
         if not reminders:
             return
 
+        # 限制并发发送，降低触发限流与阻塞事件循环的风险。
         semaphore = asyncio.Semaphore(self.send_concurrency)
 
         async def _process_one(reminder):
@@ -81,11 +83,19 @@ class SchedulerService:
                             reminder.chat_id,
                         )
                 except Exception as e:
-                    reminder.locked_until = None
+                    # 避免临时失败后立即被再次认领导致重试风暴。
+                    now = now_in_timezone()
+                    desired = now + timedelta(seconds=self.lock_seconds)
+                    if reminder.locked_until is None or reminder.locked_until < desired:
+                        reminder.locked_until = desired
                     try:
                         await self.db.update_reminder(reminder)
-                    except Exception:
-                        pass
+                    except Exception as update_exc:
+                        logger.error(
+                            "Failed to update lock for reminder id=%s: %s",
+                            reminder.id,
+                            update_exc,
+                        )
                     logger.error(f"处理提醒 {reminder.id} 失败: {e}")
 
         await asyncio.gather(*[_process_one(r) for r in reminders])
@@ -98,6 +108,24 @@ class SchedulerService:
             await self.send_callback(reminder.chat_id, f"⏰ 提醒: {reminder.content}")
             logger.info("Sent reminder id=%s chat_id=%s", reminder.id, reminder.chat_id)
             return True
+        except RetryAfter as exc:
+            delay = max(int(getattr(exc, "retry_after", 0) or 0), self.lock_seconds)
+            reminder.locked_until = now_in_timezone() + timedelta(seconds=delay)
+            try:
+                await self.db.update_reminder(reminder)
+            except Exception as update_exc:
+                logger.error(
+                    "Failed to delay reminder id=%s after rate limit: %s",
+                    reminder.id,
+                    update_exc,
+                )
+            logger.warning(
+                "Rate limited for reminder id=%s chat_id=%s retry_after=%s",
+                reminder.id,
+                reminder.chat_id,
+                getattr(exc, "retry_after", None),
+            )
+            return False
         except Forbidden as exc:
             logger.warning(
                 "Chat forbidden, deactivating reminder id=%s chat_id=%s: %s",

@@ -1,5 +1,7 @@
 """命令处理模块"""
 
+import asyncio
+
 from telegram import Update
 from telegram.ext import ContextTypes
 from src.database.db import Database
@@ -64,7 +66,8 @@ class CommandHandler:
             return
 
         text = " ".join(context.args)
-        result = self.parser.parse(text)
+        # AI 解析可能触发阻塞式 HTTP，放到线程池避免卡住事件循环。
+        result = await asyncio.to_thread(self.parser.parse, text)
 
         if result is None:
             await update.message.reply_text(
@@ -134,7 +137,8 @@ class CommandHandler:
     ) -> None:
         """处理自然语言消息"""
         text = update.message.text
-        result = self.parser.parse(text)
+        # AI 解析可能触发阻塞式 HTTP，放到线程池避免卡住事件循环。
+        result = await asyncio.to_thread(self.parser.parse, text)
 
         if result is None:
             await update.message.reply_text("💡 试试这样说：\n" "明天9点提醒我开会")

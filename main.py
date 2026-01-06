@@ -1,7 +1,7 @@
 """智能提醒机器人入口"""
 
 import logging
-from telegram.ext import Application
+from telegram.ext import Application, ContextTypes
 from telegram import BotCommand
 from src.config import settings
 from src.database.db import Database
@@ -17,6 +17,37 @@ def setup_logging() -> None:
     level = getattr(logging, level_name, logging.INFO)
     logging.basicConfig(
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=level
+    )
+
+
+def log_startup_settings() -> None:
+    """记录关键配置（不包含敏感信息）。"""
+    logger.info(
+        "Config: timezone=%s db_path=%s scheduler_interval=%s batch=%s lock=%s concurrency=%s",
+        settings.TIMEZONE,
+        settings.DATABASE_PATH,
+        settings.SCHEDULER_INTERVAL_SECONDS,
+        settings.SCHEDULER_BATCH_SIZE,
+        settings.SCHEDULER_LOCK_SECONDS,
+        settings.SCHEDULER_SEND_CONCURRENCY,
+    )
+    logger.info(
+        "Update handling: drop_pending_updates=%s",
+        settings.DROP_PENDING_UPDATES,
+    )
+    if settings.HEALTHCHECK_ENABLED:
+        logger.info(
+            "Healthcheck enabled: host=%s port=%s path=%s",
+            settings.HEALTHCHECK_HOST,
+            settings.HEALTHCHECK_PORT,
+            settings.HEALTHCHECK_PATH,
+        )
+    else:
+        logger.info("Healthcheck disabled")
+    logger.info(
+        "Instance lock: enabled=%s path=%s",
+        settings.INSTANCE_LOCK_ENABLED,
+        settings.INSTANCE_LOCK_PATH,
     )
 
 
@@ -63,8 +94,24 @@ async def post_init(application: Application):
     if settings.HEALTHCHECK_ENABLED:
 
         async def _health_check():
-            ok = await db.ping()
-            return {"ok": ok, "status": "ok" if ok else "db_error"}
+            # 同时检查 DB 与调度器，避免“进程活着但不工作”的情况。
+            db_ok = await db.ping()
+            scheduler_ok = scheduler.is_healthy() if scheduler else False
+            ok = db_ok and scheduler_ok
+            if not db_ok:
+                status = "db_error"
+            elif not scheduler_ok:
+                status = "scheduler_unhealthy"
+            else:
+                status = "ok"
+            payload = {
+                "ok": ok,
+                "status": status,
+                "db_ok": db_ok,
+                "scheduler_ok": scheduler_ok,
+                "scheduler": scheduler.health_snapshot() if scheduler else None,
+            }
+            return payload
 
         health_server = HealthCheckServer(
             host=settings.HEALTHCHECK_HOST,
@@ -90,18 +137,33 @@ async def post_shutdown(application: Application):
         instance_lock = None
 
 
+async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """统一错误处理，避免异常导致请求无响应。"""
+    logger.exception("Unhandled error: %s", context.error)
+    message = getattr(update, "effective_message", None)
+    if message:
+        try:
+            await message.reply_text("⚠️ 系统繁忙，请稍后再试")
+        except Exception:
+            pass
+
+
 def main():
     """主函数"""
     global app, instance_lock
     if not settings.BOT_TOKEN:
         logger.error("BOT_TOKEN not configured")
-        return
+        # Fail fast so process supervisors can detect misconfiguration.
+        raise SystemExit(1)
+
+    log_startup_settings()
 
     if settings.INSTANCE_LOCK_ENABLED:
         instance_lock = InstanceLock(settings.INSTANCE_LOCK_PATH)
         if not instance_lock.acquire():
             logger.error("Another instance is running. Exiting.")
-            return
+            # Avoid running multiple instances against the same SQLite DB.
+            raise SystemExit(1)
 
     app = (
         Application.builder()
@@ -111,10 +173,12 @@ def main():
         .build()
     )
     register_handlers(app, db)
+    app.add_error_handler(on_error)
 
     logger.info("Bot starting...")
     try:
-        app.run_polling()
+        # 可选丢弃积压更新，避免长时间宕机后消息洪峰。
+        app.run_polling(drop_pending_updates=settings.DROP_PENDING_UPDATES)
     finally:
         if instance_lock:
             instance_lock.release()

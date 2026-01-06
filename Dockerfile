@@ -9,6 +9,7 @@ COPY requirements.lock requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.lock
 
 COPY src ./src
+COPY scripts ./scripts
 COPY main.py ./main.py
 
 CMD ["python", "main.py"]

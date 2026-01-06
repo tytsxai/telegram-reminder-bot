@@ -8,6 +8,7 @@ venv/
 tests/
 docs/
 scripts/
+!scripts/backup_db.py
 .env
 .DS_Store
 *.db

@@ -1,4 +1,7 @@
-"""配置管理模块"""
+"""配置管理模块
+
+使用 pydantic-settings 从环境变量和 .env 文件加载配置。
+"""
 
 from typing import Optional
 
@@ -56,6 +59,7 @@ class Settings(BaseSettings):
     SCHEDULER_BATCH_SIZE: int = 200
     SCHEDULER_LOCK_SECONDS: int = 120
     SCHEDULER_SEND_CONCURRENCY: int = 5
+    DROP_PENDING_UPDATES: bool = False
     IMAGE_TAG: Optional[str] = None
     HEALTHCHECK_ENABLED: bool = False
     HEALTHCHECK_HOST: str = "127.0.0.1"

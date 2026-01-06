@@ -2,13 +2,22 @@ name: telegram-reminder-bot
 
 services:
   app:
-    image: telegram-reminder-bot-app:${IMAGE_TAG}
+    # IMAGE_TAG 缺省时使用 latest，避免 compose 因未定义变量启动失败。
+    image: telegram-reminder-bot-app:${IMAGE_TAG:-latest}
     container_name: telegram-reminder-bot-app
     env_file: .env
+    environment:
+      DATABASE_PATH: ${DATABASE_PATH:-/app/data/reminders.db}
     restart: unless-stopped
+    volumes:
+      - reminder-data:/app/data
     networks:
       - telegram-reminder-bot-network
 
 networks:
   telegram-reminder-bot-network:
     name: telegram-reminder-bot-network
+
+volumes:
+  reminder-data:
+    name: telegram-reminder-bot-data

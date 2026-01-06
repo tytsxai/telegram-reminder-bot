@@ -19,6 +19,7 @@ class TestSettings:
             "ANTHROPIC_API_KEY", "ANTHROPIC_MODEL", "ANTHROPIC_BASE_URL",
             "LOG_LEVEL", "SCHEDULER_INTERVAL_SECONDS", "IMAGE_TAG",
             "SCHEDULER_BATCH_SIZE", "SCHEDULER_LOCK_SECONDS", "SCHEDULER_SEND_CONCURRENCY",
+            "DROP_PENDING_UPDATES",
             "HEALTHCHECK_ENABLED", "HEALTHCHECK_HOST", "HEALTHCHECK_PORT", "HEALTHCHECK_PATH",
         ]
         clean_env = {k: "" for k in env_keys if k in os.environ}
@@ -48,6 +49,7 @@ class TestSettings:
         assert s.SCHEDULER_BATCH_SIZE == 200
         assert s.SCHEDULER_LOCK_SECONDS == 120
         assert s.SCHEDULER_SEND_CONCURRENCY == 5
+        assert s.DROP_PENDING_UPDATES is False
         assert s.IMAGE_TAG is None
         assert s.HEALTHCHECK_ENABLED is False
         assert s.HEALTHCHECK_HOST == "127.0.0.1"

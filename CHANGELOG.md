@@ -1,5 +1,44 @@
 # 变更记录
 
+## [0.3.3] - 2026-01-06
+
+### Added
+- 发送尝试字段（send_attempt_for / send_attempt_until）与索引，降低崩溃后的重复发送
+- /list 支持分页参数与默认分页大小
+- UTF-16 安全截断工具函数，避免消息超过 Telegram 限制
+
+### Changed
+- 调度器发送前标记尝试并刷新锁，发送后清理尝试状态
+- Reminder 计算下次时间时支持快速追赶，减少大延迟场景循环
+- API 文档与 README 同步分页与新字段说明
+
+### Fixed
+- 超长内容导致回复失败的问题（创建回执与列表输出）
+
+## [0.3.2] - 2026-01-05
+
+### Changed
+- 完善运维手册，补充日志管理、监控告警、性能调优章节
+- 故障排查文档新增数据库迁移失败、内存占用过高等场景
+- 补充源代码关键函数的文档字符串
+
+### Documentation
+- OPERATIONS.md 新增日志轮转、Prometheus 指标、性能调优建议
+- TROUBLESHOOTING.md 新增迁移失败、内存问题、AI 超时排查
+- 源代码模块补充 docstring 说明
+
+## [0.3.1] - 2025-01-05
+
+### Changed
+- 完善所有文档，补充缺失的配置项说明
+- README.md 补充 AI_BASE_URL、OPENAI_BASE_URL、ANTHROPIC_BASE_URL 配置
+- API.md 补充 claim_pending_reminders 方法和新增字段
+- ARCHITECTURE.md 补充 utils 模块说明
+- DEVELOPMENT.md 补充完整环境变量列表
+- DEPLOYMENT.md 新增 Docker 部署章节
+- OPERATIONS.md 新增 Docker 运维命令
+- TROUBLESHOOTING.md 新增限流和 Forbidden 故障排查
+
 ## [0.3.0] - 2025-12-31
 
 ### Added

@@ -117,16 +117,20 @@ class OpenAIParser(AIParser):
 | TIMEZONE | 否 | 时区，默认 Asia/Shanghai |
 | AI_API_KEY | 否 | SiliconFlow API 密钥 |
 | AI_MODEL | 否 | SiliconFlow 模型名称 |
+| AI_BASE_URL | 否 | SiliconFlow API 地址 |
 | AI_PROVIDER | 否 | 解析器选择（siliconflow/openai/claude/rule） |
 | OPENAI_API_KEY | 否 | OpenAI API 密钥 |
 | OPENAI_MODEL | 否 | OpenAI 模型名称 |
+| OPENAI_BASE_URL | 否 | OpenAI API 地址 |
 | ANTHROPIC_API_KEY | 否 | Claude API 密钥 |
 | ANTHROPIC_MODEL | 否 | Claude 模型名称 |
+| ANTHROPIC_BASE_URL | 否 | Claude API 地址 |
 | LOG_LEVEL | 否 | 日志等级（默认 INFO） |
 | SCHEDULER_INTERVAL_SECONDS | 否 | 调度扫描间隔（秒） |
 | SCHEDULER_BATCH_SIZE | 否 | 单次调度批量领取条数 |
 | SCHEDULER_LOCK_SECONDS | 否 | 调度锁定时长（秒） |
 | SCHEDULER_SEND_CONCURRENCY | 否 | 并发发送上限 |
+| DROP_PENDING_UPDATES | 否 | 是否丢弃积压更新（避免宕机后消息洪峰） |
 | HEALTHCHECK_ENABLED | 否 | 是否启用健康检查 |
 | HEALTHCHECK_HOST | 否 | 健康检查监听地址 |
 | HEALTHCHECK_PORT | 否 | 健康检查端口 |

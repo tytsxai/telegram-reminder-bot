@@ -6,7 +6,7 @@
 
 - 自然语言解析：直接发送"明天9点提醒我开会"
 - 重复提醒：支持每日/每周/每月重复
-- 命令操作：/remind、/list、/delete
+- 命令操作：/remind、/list（支持分页）、/delete
 - AI 接口预留：可扩展 OpenAI/Claude 解析能力
 - 定时调度：自动发送到期提醒
 
@@ -47,16 +47,21 @@ BOT_TOKEN=your_telegram_bot_token
 TIMEZONE=Asia/Shanghai
 DATABASE_PATH=reminders.db
 
-# AI 配置（可选）
-AI_API_KEY=your_api_key
-AI_MODEL=gpt-4
+# AI 配置（可选，SiliconFlow/DeepSeek）
 AI_PROVIDER=siliconflow
+AI_API_KEY=your_api_key
+AI_MODEL=deepseek-ai/DeepSeek-V3
+AI_BASE_URL=
 
-# OpenAI/Claude（可选）
+# OpenAI（可选）
 OPENAI_API_KEY=
 OPENAI_MODEL=
+OPENAI_BASE_URL=
+
+# Claude（可选）
 ANTHROPIC_API_KEY=
 ANTHROPIC_MODEL=
+ANTHROPIC_BASE_URL=
 
 # 运行配置（可选）
 LOG_LEVEL=INFO
@@ -64,6 +69,7 @@ SCHEDULER_INTERVAL_SECONDS=30
 SCHEDULER_BATCH_SIZE=200
 SCHEDULER_LOCK_SECONDS=120
 SCHEDULER_SEND_CONCURRENCY=5
+DROP_PENDING_UPDATES=false
 
 # 监控端点（可选）
 HEALTHCHECK_ENABLED=false
@@ -99,7 +105,7 @@ python main.py
 | `/start` | 启动机器人 | `/start` |
 | `/help` | 获取帮助 | `/help` |
 | `/remind` | 设置提醒 | `/remind 明天9点提醒我开会` |
-| `/list` | 查看提醒列表 | `/list` |
+| `/list` | 查看提醒列表（可分页） | `/list 1` |
 | `/delete` | 删除提醒 | `/delete 1` |
 
 ### 自然语言示例
@@ -118,6 +124,13 @@ python main.py
 - 日期：今天、明天、后天、下周X、具体日期（YYYY-MM-DD）
 - 时间：X点、X点X分、上午/下午
 - 重复：每天、每周一~周日、每月1号~31号
+
+分页示例：
+
+```
+/list 1
+/list 2 50
+```
 
 ## 项目结构
 

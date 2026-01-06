@@ -39,6 +39,7 @@ SCHEDULER_INTERVAL_SECONDS=30
 SCHEDULER_BATCH_SIZE=200
 SCHEDULER_LOCK_SECONDS=120
 SCHEDULER_SEND_CONCURRENCY=5
+DROP_PENDING_UPDATES=false
 HEALTHCHECK_ENABLED=true
 HEALTHCHECK_HOST=0.0.0.0
 HEALTHCHECK_PORT=8080
@@ -127,3 +128,48 @@ sudo systemctl start reminder-bot
 - 配置日志采集与保留策略。
 - 配置外部监控，定期探测健康检查端点。
 - 参考 `docs/OPERATIONS.md` 的运行手册。
+
+## Docker 部署
+
+### 构建镜像
+
+```bash
+docker build -t telegram-reminder-bot-app:latest .
+```
+
+### 运行容器
+
+```bash
+docker run -d \
+  --name telegram-reminder-bot \
+  --env-file .env \
+  -v /path/to/data:/app/data \
+  telegram-reminder-bot-app:latest
+```
+
+### 使用 docker-compose
+
+1. 设置 `IMAGE_TAG` 环境变量或在 `.env` 中配置（未配置默认 `latest`）
+2. 启动服务：
+
+```bash
+IMAGE_TAG=latest docker-compose up -d
+```
+
+docker-compose 默认挂载 `telegram-reminder-bot-data` 到 `/app/data`，并在未设置
+`DATABASE_PATH` 时使用 `/app/data/reminders.db`。如需自定义路径，可在 `.env` 中覆盖
+`DATABASE_PATH` 或修改 compose 文件的 volume 绑定。
+
+### 数据持久化
+
+建议将数据库文件挂载到宿主机：
+
+```bash
+-v /var/lib/reminder:/app/data
+```
+
+并在 `.env` 中设置：
+
+```
+DATABASE_PATH=/app/data/reminders.db
+```

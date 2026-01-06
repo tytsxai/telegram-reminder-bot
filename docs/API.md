@@ -33,12 +33,17 @@ class RepeatType(str, Enum):
 | user_id | int | Telegram 用户 ID |
 | chat_id | int | Telegram 聊天 ID |
 | content | str | 提醒内容 |
-| remind_at | datetime | 提醒时间 |
+| remind_at | datetime | 提醒时间（UTC） |
 | repeat_type | RepeatType | 重复类型 |
 | repeat_weekday | int/None | 每周重复的星期（0=周一） |
 | repeat_monthday | int/None | 每月重复的日期（1-31） |
 | is_active | bool | 是否激活 |
-| created_at | datetime | 创建时间 |
+| locked_until | datetime/None | 锁定截止时间（防并发） |
+| last_sent_at | datetime/None | 上次发送时间 |
+| last_sent_for | datetime/None | 上次发送对应的 remind_at |
+| send_attempt_for | datetime/None | 当前发送尝试对应的 remind_at |
+| send_attempt_until | datetime/None | 发送尝试锁定截止时间 |
+| created_at | datetime | 创建时间（UTC） |
 
 **方法：**
 
@@ -69,11 +74,12 @@ db = Database(db_path="reminders.db")
 | `init_db()` | - | None | 初始化数据库表 |
 | `create_reminder()` | Reminder | Reminder | 创建提醒 |
 | `get_reminder()` | id: int | Reminder/None | 获取单个提醒 |
-| `get_user_reminders()` | user_id: int | List[Reminder] | 获取用户所有提醒 |
+| `get_user_reminders()` | user_id: int, chat_id: int, limit?: int, offset?: int | List[Reminder] | 获取用户提醒（可分页） |
 | `get_pending_reminders()` | - | List[Reminder] | 获取待发送提醒 |
+| `claim_pending_reminders()` | limit: int, lock_seconds: int | List[Reminder] | 领取并锁定待发送提醒 |
 | `update_reminder()` | Reminder | bool | 更新提醒 |
 | `delete_reminder()` | id: int | bool | 删除提醒 |
-| `delete_reminder_by_user()` | id: int, user_id: int | bool | 按用户删除提醒 |
+| `delete_reminder_by_user()` | id: int, user_id: int, chat_id: int | bool | 按用户删除提醒 |
 | `ping()` | - | bool | 数据库连通性检查 |
 
 **示例：**
@@ -112,17 +118,17 @@ service = ReminderService(db)
 |------|------|
 | `create_reminder()` | 创建提醒 |
 | `get_reminder(id)` | 获取提醒 |
-| `get_user_reminders(user_id)` | 获取用户提醒 |
+| `get_user_reminders(user_id, chat_id, limit=None, offset=None)` | 获取用户提醒（可分页） |
 | `delete_reminder(id)` | 删除提醒 |
-| `delete_reminder_by_user(id, user_id)` | 按用户删除提醒 |
-| `process_reminder(reminder)` | 处理提醒（重复逻辑） |
+| `delete_reminder_by_user(id, user_id, chat_id)` | 按用户删除提醒 |
+| `process_reminder(reminder, sent_at, sent_for)` | 处理提醒（重复逻辑） |
 
 ### SchedulerService 类
 
 ```python
 from src.services.scheduler import SchedulerService
 
-scheduler = SchedulerService(db, send_callback)
+scheduler = SchedulerService(db, send_callback, interval_seconds=30)
 scheduler.start()
 ```
 
@@ -131,7 +137,14 @@ scheduler.start()
 | `start()` | 启动调度器 |
 | `stop()` | 停止调度器 |
 
-支持可选参数：`interval_seconds` 用于配置扫描间隔（秒）。
+**配置参数（通过环境变量）：**
+
+| 参数 | 说明 |
+|------|------|
+| `interval_seconds` | 扫描间隔（秒），默认 30 |
+| `batch_size` | 单次批量领取条数，默认 200 |
+| `lock_seconds` | 锁定时长（秒），默认 120 |
+| `send_concurrency` | 并发发送上限，默认 5 |
 
 ### HealthCheckServer 类
 

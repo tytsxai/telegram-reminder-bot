@@ -66,12 +66,16 @@ class Settings(BaseSettings):
     DATABASE_PATH: str
     TIMEZONE: str
     AI_API_KEY: Optional[str]
+    AI_BASE_URL: Optional[str]
+    AI_PROVIDER: Optional[str]
     LOG_LEVEL: str
     SCHEDULER_INTERVAL_SECONDS: int
     SCHEDULER_BATCH_SIZE: int
     SCHEDULER_LOCK_SECONDS: int
     SCHEDULER_SEND_CONCURRENCY: int
     HEALTHCHECK_ENABLED: bool
+    DROP_PENDING_UPDATES: bool
+    INSTANCE_LOCK_ENABLED: bool
 ```
 
 ### 调度器流程
@@ -91,6 +95,9 @@ class Settings(BaseSettings):
                          └──────────────────────┘
 ```
 
+调度器在发送前会写入 `send_attempt_for/send_attempt_until`，用于标记“正在发送”
+并在崩溃恢复时减少重复发送。发送成功或停用后会清理该标记。
+
 ## 技术栈
 
 | 组件 | 技术 |
@@ -100,6 +107,24 @@ class Settings(BaseSettings):
 | 数据库 | SQLite + aiosqlite |
 | 配置 | pydantic-settings |
 | 测试 | pytest + pytest-asyncio |
+
+## 工具模块
+
+### time_utils
+
+时间处理工具，统一 UTC 与本地时区转换：
+
+- `now_utc()` - 获取当前 UTC 时间
+- `now_in_timezone()` - 获取配置时区的当前时间
+- `to_utc()` / `from_utc()` - 时区转换
+- `add_months()` - 月份加减（处理月末边界）
+
+### instance_lock
+
+文件锁实现，防止多实例同时运行：
+
+- `InstanceLock.acquire()` - 获取锁
+- `InstanceLock.release()` - 释放锁
 
 ## 数据库迁移策略
 

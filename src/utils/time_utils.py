@@ -1,4 +1,7 @@
-"""Time utility helpers."""
+"""Time utility helpers.
+
+提供时区转换、UTC 处理、月份加减等时间工具函数。
+"""
 
 from datetime import datetime, timedelta
 import calendar

@@ -1,4 +1,7 @@
-"""处理器注册模块"""
+"""处理器注册模块
+
+将命令处理器和消息处理器注册到 Telegram Application。
+"""
 
 from telegram.ext import Application, CommandHandler as TGCommandHandler
 from telegram.ext import MessageHandler, filters

@@ -1,4 +1,11 @@
-"""AI解析接口模块"""
+"""AI解析接口模块
+
+提供自然语言解析能力，支持多种后端：
+- RuleBasedParser: 基于正则的规则解析（无需 API）
+- SiliconFlowParser: SiliconFlow/DeepSeek 解析
+- OpenAIParser: OpenAI 兼容接口
+- ClaudeParser: Anthropic Claude 接口
+"""
 
 from __future__ import annotations
 
@@ -180,7 +187,10 @@ class RuleBasedParser(AIParser):
             if remind_at <= now:
                 if repeat_type == RepeatType.NONE and explicit_date:
                     return None
-                remind_at = remind_at + timedelta(days=1)
+                interval = timedelta(days=1)
+                delta = now - remind_at
+                steps = int(delta.total_seconds() // interval.total_seconds()) + 1
+                remind_at = remind_at + interval * steps
 
         return ParseResult(
             content=content,
@@ -422,7 +432,10 @@ class LLMJSONParser(AIParser):
                 remind_at = add_months(remind_at, 1, target_day=repeat_monthday)
         elif repeat_type in (RepeatType.DAILY, RepeatType.NONE):
             if remind_at <= now:
-                remind_at = remind_at + timedelta(days=1)
+                interval = timedelta(days=1)
+                delta = now - remind_at
+                steps = int(delta.total_seconds() // interval.total_seconds()) + 1
+                remind_at = remind_at + interval * steps
         return remind_at, repeat_weekday, repeat_monthday
 
     def parse(self, text: str) -> Optional[ParseResult]:

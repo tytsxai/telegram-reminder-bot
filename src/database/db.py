@@ -1,4 +1,11 @@
-"""数据库操作模块"""
+"""数据库操作模块
+
+提供异步 SQLite 数据库操作，包括：
+- 提醒的 CRUD 操作
+- 数据库初始化与迁移
+- 并发控制（锁定机制）
+- 发送尝试标记（避免崩溃后重复发送）
+"""
 
 from __future__ import annotations
 
@@ -93,6 +100,8 @@ class Database:
                     locked_until TEXT,
                     last_sent_at TEXT,
                     last_sent_for TEXT,
+                    send_attempt_for TEXT,
+                    send_attempt_until TEXT,
                     is_active INTEGER DEFAULT 1,
                     created_at TEXT NOT NULL
                 )
@@ -116,6 +125,11 @@ class Database:
             await self._ensure_columns(db)
             await self._migrate_times_to_utc(db)
             await self._set_schema_version(db, 3)
+            current = 3
+        if current < 4:
+            await self._ensure_columns(db)
+            await self._create_indexes(db)
+            await self._set_schema_version(db, 4)
 
     async def _get_schema_version(self, db: aiosqlite.Connection) -> int:
         """读取当前数据库版本"""
@@ -151,13 +165,17 @@ class Database:
             await db.execute("ALTER TABLE reminders ADD COLUMN last_sent_at TEXT")
         if "last_sent_for" not in existing:
             await db.execute("ALTER TABLE reminders ADD COLUMN last_sent_for TEXT")
+        if "send_attempt_for" not in existing:
+            await db.execute("ALTER TABLE reminders ADD COLUMN send_attempt_for TEXT")
+        if "send_attempt_until" not in existing:
+            await db.execute("ALTER TABLE reminders ADD COLUMN send_attempt_until TEXT")
 
     async def _migrate_times_to_utc(self, db: aiosqlite.Connection) -> None:
         """将时间字段统一转换为 UTC ISO 格式。"""
         db.row_factory = aiosqlite.Row
         cursor = await db.execute(
-            "SELECT id, remind_at, created_at, locked_until, last_sent_at, last_sent_for "
-            "FROM reminders"
+            "SELECT id, remind_at, created_at, locked_until, last_sent_at, "
+            "last_sent_for, send_attempt_for, send_attempt_until FROM reminders"
         )
         rows = await cursor.fetchall()
         for row in rows:
@@ -168,6 +186,8 @@ class Database:
                 "locked_until",
                 "last_sent_at",
                 "last_sent_for",
+                "send_attempt_for",
+                "send_attempt_until",
             ):
                 value = row[field]
                 if not value:
@@ -198,6 +218,10 @@ class Database:
         await db.execute(
             "CREATE INDEX IF NOT EXISTS idx_reminders_user_id ON reminders (user_id)"
         )
+        await db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_reminders_pending "
+            "ON reminders (is_active, remind_at, locked_until, send_attempt_until)"
+        )
 
     async def create_reminder(self, reminder: Reminder) -> Reminder:
         """创建提醒"""
@@ -206,8 +230,8 @@ class Database:
                 """INSERT INTO reminders 
                    (user_id, chat_id, content, remind_at, repeat_type,
                     repeat_weekday, repeat_monthday, locked_until, last_sent_at,
-                    last_sent_for, is_active, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    last_sent_for, send_attempt_for, send_attempt_until, is_active, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     reminder.user_id,
                     reminder.chat_id,
@@ -224,6 +248,12 @@ class Database:
                     else None,
                     to_utc_iso(reminder.last_sent_for)
                     if reminder.last_sent_for
+                    else None,
+                    to_utc_iso(reminder.send_attempt_for)
+                    if reminder.send_attempt_for
+                    else None,
+                    to_utc_iso(reminder.send_attempt_until)
+                    if reminder.send_attempt_until
                     else None,
                     1 if reminder.is_active else 0,
                     to_utc_iso(reminder.created_at),
@@ -246,21 +276,33 @@ class Database:
             return None
 
     async def get_user_reminders(
-        self, user_id: int, chat_id: Optional[int] = None
+        self,
+        user_id: int,
+        chat_id: Optional[int] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
     ) -> List[Reminder]:
         """获取用户所有提醒"""
         async with self._connect() as db:
             db.row_factory = aiosqlite.Row
             if chat_id is None:
-                cursor = await db.execute(
-                    "SELECT * FROM reminders WHERE user_id = ? AND is_active = 1",
-                    (user_id,),
+                sql = (
+                    "SELECT * FROM reminders WHERE user_id = ? AND is_active = 1 "
+                    "ORDER BY remind_at"
                 )
+                params = [user_id]
             else:
-                cursor = await db.execute(
-                    "SELECT * FROM reminders WHERE user_id = ? AND chat_id = ? AND is_active = 1",
-                    (user_id, chat_id),
+                sql = (
+                    "SELECT * FROM reminders WHERE user_id = ? AND chat_id = ? "
+                    "AND is_active = 1 ORDER BY remind_at"
                 )
+                params = [user_id, chat_id]
+            if limit is not None:
+                if offset is None:
+                    offset = 0
+                sql = f"{sql} LIMIT ? OFFSET ?"
+                params.extend([limit, offset])
+            cursor = await db.execute(sql, tuple(params))
             rows = await cursor.fetchall()
             return [self._row_to_reminder(dict(row)) for row in rows]
 
@@ -269,6 +311,7 @@ class Database:
         now = now_utc().isoformat()
         async with self._connect() as db:
             db.row_factory = aiosqlite.Row
+            # send_attempt_* ensures retries are delayed after in-flight attempts.
             cursor = await db.execute(
                 """
                 SELECT * FROM reminders
@@ -276,8 +319,14 @@ class Database:
                   AND remind_at <= ?
                   AND (locked_until IS NULL OR locked_until < ?)
                   AND (last_sent_for IS NULL OR last_sent_for != remind_at)
+                  AND (
+                        send_attempt_for IS NULL
+                        OR send_attempt_for != remind_at
+                        OR send_attempt_until IS NULL
+                        OR send_attempt_until < ?
+                  )
                 """,
-                (now, now),
+                (now, now, now),
             )
             rows = await cursor.fetchall()
             return [self._row_to_reminder(dict(row)) for row in rows]
@@ -294,6 +343,7 @@ class Database:
         async with self._connect() as db:
             db.row_factory = aiosqlite.Row
             await db.execute("BEGIN IMMEDIATE")
+            # Avoid claiming items that are currently being attempted elsewhere.
             cursor = await db.execute(
                 """
                 SELECT * FROM reminders
@@ -301,10 +351,16 @@ class Database:
                   AND remind_at <= ?
                   AND (locked_until IS NULL OR locked_until < ?)
                   AND (last_sent_for IS NULL OR last_sent_for != remind_at)
+                  AND (
+                        send_attempt_for IS NULL
+                        OR send_attempt_for != remind_at
+                        OR send_attempt_until IS NULL
+                        OR send_attempt_until < ?
+                  )
                 ORDER BY remind_at
                 LIMIT ?
                 """,
-                (now, now, limit),
+                (now, now, now, limit),
             )
             rows = await cursor.fetchall()
             ids = [row["id"] for row in rows]
@@ -331,7 +387,9 @@ class Database:
             cursor = await db.execute(
                 """UPDATE reminders SET content=?, remind_at=?, 
                    repeat_type=?, repeat_weekday=?, repeat_monthday=?,
-                   locked_until=?, last_sent_at=?, last_sent_for=?, is_active=? WHERE id=?""",
+                   locked_until=?, last_sent_at=?, last_sent_for=?,
+                   send_attempt_for=?, send_attempt_until=?,
+                   is_active=? WHERE id=?""",
                 (
                     reminder.content,
                     to_utc_iso(reminder.remind_at),
@@ -346,6 +404,12 @@ class Database:
                     else None,
                     to_utc_iso(reminder.last_sent_for)
                     if reminder.last_sent_for
+                    else None,
+                    to_utc_iso(reminder.send_attempt_for)
+                    if reminder.send_attempt_for
+                    else None,
+                    to_utc_iso(reminder.send_attempt_until)
+                    if reminder.send_attempt_until
                     else None,
                     1 if reminder.is_active else 0,
                     reminder.id,
@@ -400,6 +464,12 @@ class Database:
             else None,
             last_sent_for=from_utc_iso(row["last_sent_for"])
             if row.get("last_sent_for")
+            else None,
+            send_attempt_for=from_utc_iso(row["send_attempt_for"])
+            if row.get("send_attempt_for")
+            else None,
+            send_attempt_until=from_utc_iso(row["send_attempt_until"])
+            if row.get("send_attempt_until")
             else None,
             is_active=bool(row["is_active"]),
             created_at=from_utc_iso(row["created_at"]),

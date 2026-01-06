@@ -1,4 +1,7 @@
-"""Simple HTTP health check server."""
+"""Simple HTTP health check server.
+
+提供轻量级 HTTP 健康检查端点，用于容器探针和监控系统。
+"""
 
 from __future__ import annotations
 

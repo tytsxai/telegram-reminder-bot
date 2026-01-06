@@ -1,4 +1,8 @@
-"""Process-level instance lock."""
+"""Process-level instance lock.
+
+通过文件锁确保同一时间只有一个实例运行，防止重复发送提醒。
+支持 Unix (fcntl) 和 Windows (msvcrt) 平台。
+"""
 
 from __future__ import annotations
 

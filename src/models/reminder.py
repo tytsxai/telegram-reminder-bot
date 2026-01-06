@@ -1,4 +1,7 @@
-"""提醒数据模型"""
+"""提醒数据模型
+
+定义提醒的数据结构和重复类型枚举。
+"""
 
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -31,6 +34,9 @@ class Reminder:
     locked_until: Optional[datetime] = None
     last_sent_at: Optional[datetime] = None
     last_sent_for: Optional[datetime] = None
+    # Track in-flight delivery attempts to reduce duplicate sends after crashes.
+    send_attempt_for: Optional[datetime] = None
+    send_attempt_until: Optional[datetime] = None
     id: Optional[int] = None
     created_at: datetime = field(default_factory=now_in_timezone)
 
@@ -54,6 +60,12 @@ class Reminder:
             else None,
             "last_sent_for": self.last_sent_for.isoformat()
             if self.last_sent_for
+            else None,
+            "send_attempt_for": self.send_attempt_for.isoformat()
+            if self.send_attempt_for
+            else None,
+            "send_attempt_until": self.send_attempt_until.isoformat()
+            if self.send_attempt_until
             else None,
             "created_at": self.created_at.isoformat(),
         }
@@ -79,6 +91,12 @@ class Reminder:
             else None,
             last_sent_for=datetime.fromisoformat(data["last_sent_for"])
             if data.get("last_sent_for")
+            else None,
+            send_attempt_for=datetime.fromisoformat(data["send_attempt_for"])
+            if data.get("send_attempt_for")
+            else None,
+            send_attempt_until=datetime.fromisoformat(data["send_attempt_until"])
+            if data.get("send_attempt_until")
             else None,
             created_at=datetime.fromisoformat(data["created_at"]),
         )

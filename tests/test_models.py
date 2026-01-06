@@ -57,6 +57,8 @@ class TestReminder:
         assert d["content"] == "测试"
         assert d["repeat_weekday"] == 2
         assert d["repeat_monthday"] == 10
+        assert "send_attempt_for" in d
+        assert "send_attempt_until" in d
 
     def test_from_dict(self):
         now = datetime.now()
@@ -69,6 +71,8 @@ class TestReminder:
             "repeat_type": "daily",
             "repeat_weekday": 3,
             "repeat_monthday": 20,
+            "send_attempt_for": now.isoformat(),
+            "send_attempt_until": now.isoformat(),
             "is_active": True,
             "created_at": now.isoformat(),
         }

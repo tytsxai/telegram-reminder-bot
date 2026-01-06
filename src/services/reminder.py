@@ -1,4 +1,9 @@
-"""提醒服务模块"""
+"""提醒服务模块
+
+封装提醒业务逻辑，包括：
+- 创建/查询/删除提醒
+- 重复提醒的下次时间计算
+"""
 
 import logging
 from datetime import datetime, timedelta
@@ -56,10 +61,14 @@ class ReminderService:
         return await self.db.get_reminder(reminder_id)
 
     async def get_user_reminders(
-        self, user_id: int, chat_id: Optional[int] = None
+        self,
+        user_id: int,
+        chat_id: Optional[int] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
     ) -> List[Reminder]:
         """获取用户所有提醒"""
-        return await self.db.get_user_reminders(user_id, chat_id)
+        return await self.db.get_user_reminders(user_id, chat_id, limit, offset)
 
     async def delete_reminder(self, reminder_id: int) -> bool:
         """删除提醒"""
@@ -83,11 +92,18 @@ class ReminderService:
             reminder.last_sent_at = sent_at
         if sent_for is not None:
             reminder.last_sent_for = sent_for
+        reminder.send_attempt_for = None
+        reminder.send_attempt_until = None
         if release_lock:
             reminder.locked_until = None
         if reminder.repeat_type == RepeatType.NONE:
             reminder.is_active = False
-            await self.db.update_reminder(reminder)
+            updated = await self.db.update_reminder(reminder)
+            if not updated:
+                logger.warning(
+                    "Failed to update reminder id=%s after send; maybe deleted",
+                    reminder.id,
+                )
             return None
 
         # 计算下次提醒时间
@@ -98,15 +114,41 @@ class ReminderService:
             reminder.repeat_monthday,
         )
         now = now_in_timezone()
-        while next_time <= now:
-            next_time = self._advance_time(
-                next_time,
-                reminder.repeat_type,
-                reminder.repeat_weekday,
-                reminder.repeat_monthday,
+        if reminder.repeat_type in (RepeatType.DAILY, RepeatType.WEEKLY):
+            interval = (
+                timedelta(days=1)
+                if reminder.repeat_type == RepeatType.DAILY
+                else timedelta(weeks=1)
             )
+            if next_time <= now:
+                delta = now - next_time
+                steps = int(delta.total_seconds() // interval.total_seconds()) + 1
+                next_time = next_time + interval * steps
+        elif reminder.repeat_type == RepeatType.MONTHLY:
+            if next_time <= now:
+                target_day = reminder.repeat_monthday or next_time.day
+                months_now = now.year * 12 + now.month
+                months_next = next_time.year * 12 + next_time.month
+                diff = max(0, months_now - months_next)
+                candidate = add_months(next_time, diff, target_day=target_day)
+                if candidate <= now:
+                    candidate = add_months(candidate, 1, target_day=target_day)
+                next_time = candidate
+        else:
+            while next_time <= now:
+                next_time = self._advance_time(
+                    next_time,
+                    reminder.repeat_type,
+                    reminder.repeat_weekday,
+                    reminder.repeat_monthday,
+                )
         reminder.remind_at = next_time
-        await self.db.update_reminder(reminder)
+        updated = await self.db.update_reminder(reminder)
+        if not updated:
+            logger.warning(
+                "Failed to update reminder id=%s after reschedule; maybe deleted",
+                reminder.id,
+            )
         return next_time
 
     def _calculate_next_time(

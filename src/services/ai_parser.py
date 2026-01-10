@@ -447,7 +447,14 @@ class LLMJSONParser(AIParser):
             logger.info("AI parser not configured; falling back")
             return self._fallback_parse(text)
 
-        content = self._call_api(text)
+        # 重试一次，应对网络抖动
+        content = None
+        for attempt in range(2):
+            content = self._call_api(text)
+            if content:
+                break
+            if attempt == 0:
+                logger.debug("AI API call failed, retrying...")
         if not content:
             return self._fallback_parse(text)
 

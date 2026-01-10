@@ -1,5 +1,6 @@
 """智能提醒机器人入口"""
 
+import asyncio
 import logging
 from telegram.ext import Application, ContextTypes
 from telegram import BotCommand
@@ -127,7 +128,12 @@ async def post_shutdown(application: Application):
     """应用关闭后的回调"""
     global scheduler, health_server, instance_lock
     if scheduler:
+        logger.info("Stopping scheduler, waiting for in-flight tasks...")
         scheduler.stop()
+        # 等待正在处理的任务完成（最多等待 lock_seconds）
+        wait_seconds = min(settings.SCHEDULER_LOCK_SECONDS, 30)
+        await asyncio.sleep(wait_seconds)
+        logger.info("Scheduler stopped")
         scheduler = None
     if health_server:
         await health_server.stop()

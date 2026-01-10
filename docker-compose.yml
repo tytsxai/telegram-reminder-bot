@@ -8,6 +8,14 @@ services:
     env_file: .env
     environment:
       DATABASE_PATH: ${DATABASE_PATH:-/app/data/reminders.db}
+      HEALTHCHECK_ENABLED: ${HEALTHCHECK_ENABLED:-true}
+      HEALTHCHECK_HOST: ${HEALTHCHECK_HOST:-0.0.0.0}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
     restart: unless-stopped
     volumes:
       - reminder-data:/app/data

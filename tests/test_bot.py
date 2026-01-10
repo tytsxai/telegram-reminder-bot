@@ -22,6 +22,8 @@ def mock_update():
     update = MagicMock()
     update.message = MagicMock()
     update.message.reply_text = AsyncMock()
+    update.message.text = ""
+    update.effective_message = update.message
     update.effective_user = MagicMock()
     update.effective_user.id = 123
     update.effective_chat = MagicMock()
@@ -42,6 +44,11 @@ def fixed_now(monkeypatch):
     monkeypatch.setattr(
         "src.services.ai_parser.RuleBasedParser._get_now", lambda self: fixed
     )
+    # 强制使用 RuleBasedParser，避免 AI API 调用
+    monkeypatch.setattr("src.config.settings.AI_API_KEY", None)
+    monkeypatch.setattr("src.config.settings.OPENAI_API_KEY", None)
+    monkeypatch.setattr("src.config.settings.ANTHROPIC_API_KEY", None)
+    monkeypatch.setattr("src.config.settings.AI_PROVIDER", None)
     return fixed
 
 

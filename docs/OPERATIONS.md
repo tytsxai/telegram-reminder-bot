@@ -53,6 +53,56 @@ docker exec telegram-reminder-bot-app \
 
 建议通过 cron 或 systemd timer 定时执行。
 
+### cron 配置示例
+
+本地部署（每天凌晨 2 点备份）：
+
+```bash
+# /etc/cron.d/reminder-bot-backup
+0 2 * * * root /path/to/venv/bin/python /path/to/scripts/backup_db.py --db /path/to/reminders.db --out-dir /var/backups/reminder --keep 7
+```
+
+Docker 部署：
+
+```bash
+# /etc/cron.d/reminder-bot-backup
+0 2 * * * root docker exec telegram-reminder-bot-app python /app/scripts/backup_db.py --db /app/data/reminders.db --out-dir /app/data/backups --keep 7
+```
+
+### systemd timer 配置示例
+
+创建 `/etc/systemd/system/reminder-bot-backup.service`：
+
+```ini
+[Unit]
+Description=Reminder Bot Database Backup
+
+[Service]
+Type=oneshot
+ExecStart=/path/to/venv/bin/python /path/to/scripts/backup_db.py --db /path/to/reminders.db --out-dir /var/backups/reminder --keep 7
+```
+
+创建 `/etc/systemd/system/reminder-bot-backup.timer`：
+
+```ini
+[Unit]
+Description=Daily backup for Reminder Bot
+
+[Timer]
+OnCalendar=*-*-* 02:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+```
+
+启用定时器：
+
+```bash
+systemctl daemon-reload
+systemctl enable --now reminder-bot-backup.timer
+```
+
 ## 恢复
 
 1) 停止服务

@@ -25,12 +25,20 @@ def parse_args() -> argparse.Namespace:
 
 
 def backup(db_path: str, out_dir: str, keep: int) -> Path:
+    src_path = Path(db_path).expanduser()
+    if db_path == ":memory:":
+        raise ValueError("In-memory database cannot be backed up")
+    if not src_path.exists():
+        raise FileNotFoundError(f"Database file not found: {src_path}")
+    if src_path.is_dir():
+        raise IsADirectoryError(f"Database path is a directory: {src_path}")
+
     out_path = Path(out_dir)
     out_path.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     backup_path = out_path / f"reminders_{timestamp}.db"
 
-    src = sqlite3.connect(db_path)
+    src = sqlite3.connect(str(src_path))
     dest = sqlite3.connect(str(backup_path))
     try:
         with dest:

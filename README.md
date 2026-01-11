@@ -106,7 +106,7 @@ python main.py
 | `/help` | 获取帮助 | `/help` |
 | `/remind` | 设置提醒 | `/remind 明天9点提醒我开会` |
 | `/list` | 查看提醒列表（可分页） | `/list 1` |
-| `/delete` | 删除提醒 | `/delete 1` |
+| `/delete` | 删除提醒（支持交互输入 ID） | `/delete 1` |
 
 ### 自然语言示例
 

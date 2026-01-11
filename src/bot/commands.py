@@ -12,12 +12,16 @@ import asyncio
 import logging
 
 from telegram import Update
-from telegram.ext import ContextTypes
+from telegram.ext import ContextTypes, ConversationHandler
+
 from src.database.db import Database
-from src.services.reminder import ReminderService
-from src.services.ai_parser import get_default_parser
 from src.models.reminder import RepeatType
+from src.services.ai_parser import get_default_parser
+from src.services.reminder import ReminderService
 from src.utils.text_utils import truncate_utf16, utf16_length
+
+# ConversationHandler 状态
+DELETE_AWAITING_ID = 1
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +31,7 @@ class CommandHandler:
 
     _DEFAULT_PAGE_SIZE = 20
     _MAX_PAGE_SIZE = 200
+
     def __init__(self, db: Database):
         self.db = db
         self.reminder_service = ReminderService(db)
@@ -110,7 +115,7 @@ class CommandHandler:
             "命令列表：\n"
             "/remind <内容> - 设置提醒\n"
             "/list [页码] [每页数量] - 查看提醒列表\n"
-            "/delete <ID> - 删除提醒\n"
+            "/delete <ID> - 删除提醒（也可直接 /delete 交互输入）\n"
             "/help - 获取帮助"
         )
 
@@ -121,7 +126,8 @@ class CommandHandler:
             "📖 使用帮助\n\n"
             "命令示例：\n"
             "• /list 1\n"
-            "• /list 2 50\n\n"
+            "• /list 2 50\n"
+            "• /delete 1（或 /delete 后输入 ID）\n\n"
             "自然语言示例：\n"
             "• 明天上午9点提醒我开会\n"
             "• 每天8点提醒我喝水\n"
@@ -241,22 +247,45 @@ class CommandHandler:
 
         await self._reply_chunks(update, f"📋 提醒列表（第 {page} 页）：", entries)
 
-    async def delete(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """处理 /delete 命令"""
+    async def delete_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        """处理 /delete 命令入口"""
         ids = self._get_user_chat_ids(update)
         if not ids:
             await self._reply(update, "⚠️ 仅支持私聊或群聊用户消息")
-            return
+            return ConversationHandler.END
+
+        # 如果带参数，直接执行删除
+        if context.args:
+            return await self._do_delete(update, context.args[0])
+
+        await self._reply(update, "请输入提醒ID")
+        return DELETE_AWAITING_ID
+
+    async def delete_receive_id(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        """接收用户输入的提醒 ID"""
+        message = update.effective_message or update.message
+        if not message or not message.text:
+            return ConversationHandler.END
+        return await self._do_delete(update, message.text.strip())
+
+    async def delete_cancel(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        """取消删除操作"""
+        await self._reply(update, "已取消删除操作")
+        return ConversationHandler.END
+
+    async def _do_delete(self, update: Update, id_text: str) -> int:
+        """执行删除逻辑"""
+        ids = self._get_user_chat_ids(update)
+        if not ids:
+            await self._reply(update, "⚠️ 仅支持私聊或群聊用户消息")
+            return ConversationHandler.END
         user_id, chat_id = ids
-        if not context.args:
-            await self._reply(update, "请输入提醒ID")
-            return
 
         try:
-            reminder_id = int(context.args[0])
+            reminder_id = int(id_text)
         except ValueError:
             await self._reply(update, "ID必须是数字")
-            return
+            return ConversationHandler.END
 
         try:
             result = await self.reminder_service.delete_reminder_by_user(
@@ -265,17 +294,16 @@ class CommandHandler:
         except Exception as exc:
             logger.exception(
                 "Failed to delete reminder id=%s user_id=%s chat_id=%s: %s",
-                reminder_id,
-                user_id,
-                chat_id,
-                exc,
+                reminder_id, user_id, chat_id, exc,
             )
             await self._reply(update, "⚠️ 系统繁忙，请稍后再试")
-            return
+            return ConversationHandler.END
+
         if result:
             await self._reply(update, "✅ 提醒已删除")
         else:
             await self._reply(update, "❌ 提醒不存在或无权删除")
+        return ConversationHandler.END
 
     async def handle_message(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE

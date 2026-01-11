@@ -115,7 +115,7 @@ class TestCommandHandler:
         await db.init_db()
         cmd = CommandHandler(db)
         mock_context.args = []
-        await cmd.delete(mock_update, mock_context)
+        await cmd.delete_start(mock_update, mock_context)
         mock_update.message.reply_text.assert_called()
 
     @pytest.mark.asyncio
@@ -123,7 +123,7 @@ class TestCommandHandler:
         await db.init_db()
         cmd = CommandHandler(db)
         mock_context.args = ["abc"]
-        await cmd.delete(mock_update, mock_context)
+        await cmd.delete_start(mock_update, mock_context)
         mock_update.message.reply_text.assert_called()
 
     @pytest.mark.asyncio
@@ -131,7 +131,7 @@ class TestCommandHandler:
         await db.init_db()
         cmd = CommandHandler(db)
         mock_context.args = ["999"]
-        await cmd.delete(mock_update, mock_context)
+        await cmd.delete_start(mock_update, mock_context)
         mock_update.message.reply_text.assert_called()
 
     @pytest.mark.asyncio
@@ -144,7 +144,7 @@ class TestCommandHandler:
         # 删除
         mock_context.args = ["1"]
         mock_update.message.reply_text.reset_mock()
-        await cmd.delete(mock_update, mock_context)
+        await cmd.delete_start(mock_update, mock_context)
         mock_update.message.reply_text.assert_called()
 
     @pytest.mark.asyncio
@@ -176,5 +176,5 @@ class TestRegisterHandlers:
 
         register_handlers(app, db)
 
-        # 验证注册了6个处理器（5个命令 + 1个消息处理器）
+        # 验证注册了6个处理器（4个命令 + 1个会话 + 1个消息处理器）
         assert app.add_handler.call_count == 6

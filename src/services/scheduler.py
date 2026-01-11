@@ -131,99 +131,113 @@ class SchedulerService:
         semaphore = asyncio.Semaphore(self.send_concurrency)
 
         async def _process_one(reminder):
-            async with semaphore:
-                if reminder.id is not None:
-                    try:
-                        current = await self.db.get_reminder(reminder.id)
-                    except Exception as exc:
-                        logger.error(
-                            "Failed to reload reminder id=%s: %s",
-                            reminder.id,
-                            exc,
-                        )
-                        return
-                    if not current or not current.is_active:
-                        logger.info(
-                            "Skipping reminder id=%s (deleted or inactive)",
-                            reminder.id,
-                        )
-                        return
-                    now_local = now_in_timezone()
-                    if current.remind_at > now_local or (
-                        current.last_sent_for is not None
-                        and current.last_sent_for == current.remind_at
-                    ):
-                        logger.info(
-                            "Skipping reminder id=%s (not due or already sent)",
-                            reminder.id,
-                        )
-                        if (
-                            current.locked_until is not None
-                            or current.send_attempt_for is not None
-                            or current.send_attempt_until is not None
+            try:
+                async with semaphore:
+                    if reminder.id is not None:
+                        try:
+                            current = await self.db.get_reminder(reminder.id)
+                        except Exception as exc:
+                            logger.error(
+                                "Failed to reload reminder id=%s: %s",
+                                reminder.id,
+                                exc,
+                            )
+                            return
+                        if not current or not current.is_active:
+                            logger.info(
+                                "Skipping reminder id=%s (deleted or inactive)",
+                                reminder.id,
+                            )
+                            return
+                        now_local = now_in_timezone()
+                        if current.remind_at > now_local or (
+                            current.last_sent_for is not None
+                            and current.last_sent_for == current.remind_at
                         ):
-                            current.locked_until = None
-                            current.send_attempt_for = None
-                            current.send_attempt_until = None
-                            try:
-                                await self.db.update_reminder(current)
-                            except Exception as update_exc:
-                                logger.error(
-                                    "Failed to clear lock for reminder id=%s: %s",
-                                    current.id,
-                                    update_exc,
-                                )
-                        return
-                    reminder = current
-                now_local = now_in_timezone()
-                # Mark in-flight attempt before send to reduce duplicate delivery.
-                reminder.locked_until = now_local + timedelta(
-                    seconds=self.lock_seconds
-                )
-                reminder.send_attempt_for = reminder.remind_at
-                reminder.send_attempt_until = reminder.locked_until
-                try:
-                    await self.db.update_reminder(reminder)
-                except Exception as update_exc:
-                    logger.error(
-                        "Failed to mark send attempt for reminder id=%s: %s",
-                        reminder.id,
-                        update_exc,
+                            logger.info(
+                                "Skipping reminder id=%s (not due or already sent)",
+                                reminder.id,
+                            )
+                            if (
+                                current.locked_until is not None
+                                or current.send_attempt_for is not None
+                                or current.send_attempt_until is not None
+                            ):
+                                current.locked_until = None
+                                current.send_attempt_for = None
+                                current.send_attempt_until = None
+                                try:
+                                    await self.db.update_reminder(current)
+                                except Exception as update_exc:
+                                    logger.error(
+                                        "Failed to clear lock for reminder id=%s: %s",
+                                        current.id,
+                                        update_exc,
+                                    )
+                            return
+                        reminder = current
+                    now_local = now_in_timezone()
+                    # Mark in-flight attempt before send to reduce duplicate delivery.
+                    reminder.locked_until = now_local + timedelta(
+                        seconds=self.lock_seconds
                     )
-                    return
-                try:
-                    sent = await self._send_reminder(reminder)
-                    if sent:
-                        sent_at = now_in_timezone()
-                        sent_for = reminder.remind_at
-                        await self.reminder_service.process_reminder(
-                            reminder, sent_at=sent_at, sent_for=sent_for
-                        )
-                        logger.info(
-                            "Processed reminder id=%s user_id=%s chat_id=%s",
-                            reminder.id,
-                            reminder.user_id,
-                            reminder.chat_id,
-                        )
-                except Exception as e:
-                    # 避免临时失败后立即被再次认领导致重试风暴。
-                    now = now_in_timezone()
-                    desired = now + timedelta(seconds=self.lock_seconds)
-                    if reminder.locked_until is None or reminder.locked_until < desired:
-                        reminder.locked_until = desired
                     reminder.send_attempt_for = reminder.remind_at
-                    reminder.send_attempt_until = desired
+                    reminder.send_attempt_until = reminder.locked_until
                     try:
                         await self.db.update_reminder(reminder)
                     except Exception as update_exc:
                         logger.error(
-                            "Failed to update lock for reminder id=%s: %s",
+                            "Failed to mark send attempt for reminder id=%s: %s",
                             reminder.id,
                             update_exc,
                         )
-                    logger.error(f"处理提醒 {reminder.id} 失败: {e}")
+                        return
+                    try:
+                        sent = await self._send_reminder(reminder)
+                        if sent:
+                            sent_at = now_in_timezone()
+                            sent_for = reminder.remind_at
+                            await self.reminder_service.process_reminder(
+                                reminder, sent_at=sent_at, sent_for=sent_for
+                            )
+                            logger.info(
+                                "Processed reminder id=%s user_id=%s chat_id=%s",
+                                reminder.id,
+                                reminder.user_id,
+                                reminder.chat_id,
+                            )
+                    except Exception as e:
+                        # 避免临时失败后立即被再次认领导致重试风暴。
+                        now = now_in_timezone()
+                        desired = now + timedelta(seconds=self.lock_seconds)
+                        if (
+                            reminder.locked_until is None
+                            or reminder.locked_until < desired
+                        ):
+                            reminder.locked_until = desired
+                        reminder.send_attempt_for = reminder.remind_at
+                        reminder.send_attempt_until = desired
+                        try:
+                            await self.db.update_reminder(reminder)
+                        except Exception as update_exc:
+                            logger.error(
+                                "Failed to update lock for reminder id=%s: %s",
+                                reminder.id,
+                                update_exc,
+                            )
+                        logger.error(f"处理提醒 {reminder.id} 失败: {e}")
+            except Exception as exc:
+                self._error_count += 1
+                self._last_error = f"process_failed: {exc}"
+                logger.exception(
+                    "Unexpected scheduler error for reminder id=%s: %s",
+                    getattr(reminder, "id", None),
+                    exc,
+                )
 
-        await asyncio.gather(*[_process_one(r) for r in reminders])
+        await asyncio.gather(
+            *[_process_one(r) for r in reminders], return_exceptions=True
+        )
 
     async def _send_reminder(self, reminder) -> bool:
         """发送提醒"""

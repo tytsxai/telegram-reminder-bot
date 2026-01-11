@@ -2,6 +2,8 @@
 
 import asyncio
 import logging
+import os
+from pathlib import Path
 from telegram.ext import Application, ContextTypes
 from telegram import BotCommand
 from src.config import settings
@@ -50,6 +52,29 @@ def log_startup_settings() -> None:
         settings.INSTANCE_LOCK_ENABLED,
         settings.INSTANCE_LOCK_PATH,
     )
+
+
+def validate_db_path() -> None:
+    """Fail fast if database path is invalid or not writable."""
+    db_path = settings.DATABASE_PATH
+    if not db_path or db_path == ":memory:":
+        return
+    path = Path(db_path).expanduser()
+    if path.exists() and path.is_dir():
+        logger.error("DATABASE_PATH points to a directory: %s", path)
+        raise SystemExit(1)
+    if path.parent and str(path.parent) not in (".", ""):
+        parent = path.parent
+    else:
+        parent = Path(".")
+    try:
+        parent.mkdir(parents=True, exist_ok=True)
+    except Exception as exc:
+        logger.error("Failed to create database directory %s: %s", parent, exc)
+        raise SystemExit(1) from exc
+    if not os.access(parent, os.W_OK):
+        logger.error("Database directory is not writable: %s", parent)
+        raise SystemExit(1)
 
 
 setup_logging()
@@ -163,6 +188,7 @@ def main():
         raise SystemExit(1)
 
     log_startup_settings()
+    validate_db_path()
 
     if settings.INSTANCE_LOCK_ENABLED:
         instance_lock = InstanceLock(settings.INSTANCE_LOCK_PATH)

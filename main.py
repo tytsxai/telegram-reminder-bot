@@ -1,5 +1,6 @@
 """智能提醒机器人入口"""
 
+import asyncio
 import logging
 import os
 from pathlib import Path
@@ -37,12 +38,17 @@ def log_startup_settings() -> None:
         "Update handling: drop_pending_updates=%s",
         settings.DROP_PENDING_UPDATES,
     )
+    logger.info(
+        "DB startup check: quick_check_on_startup=%s",
+        settings.DB_QUICK_CHECK_ON_STARTUP,
+    )
     if settings.HEALTHCHECK_ENABLED:
         logger.info(
-            "Healthcheck enabled: host=%s port=%s path=%s",
+            "Healthcheck enabled: host=%s port=%s path=%s db_timeout=%.2fs",
             settings.HEALTHCHECK_HOST,
             settings.HEALTHCHECK_PORT,
             settings.HEALTHCHECK_PATH,
+            settings.HEALTHCHECK_CHECK_TIMEOUT_SECONDS,
         )
     else:
         logger.info("Healthcheck disabled")
@@ -98,6 +104,11 @@ async def post_init(application: Application):
     try:
         await db.init_db()
         logger.info("Database initialized")
+        if settings.DB_QUICK_CHECK_ON_STARTUP:
+            if not await db.quick_check():
+                logger.error("Database quick check failed")
+                raise RuntimeError("database quick check failed")
+            logger.info("Database quick check passed")
     except Exception as exc:
         logger.exception("Database init failed: %s", exc)
         raise
@@ -128,7 +139,16 @@ async def post_init(application: Application):
 
         async def _health_check():
             # 同时检查 DB 与调度器，避免“进程活着但不工作”的情况。
-            db_ok = await db.ping()
+            try:
+                db_ok = await asyncio.wait_for(
+                    db.ping(), timeout=settings.HEALTHCHECK_CHECK_TIMEOUT_SECONDS
+                )
+            except TimeoutError:
+                db_ok = False
+                logger.error(
+                    "Healthcheck db ping timeout after %.2fs",
+                    settings.HEALTHCHECK_CHECK_TIMEOUT_SECONDS,
+                )
             scheduler_ok = scheduler.is_healthy() if scheduler else False
             ok = db_ok and scheduler_ok
             if not db_ok:

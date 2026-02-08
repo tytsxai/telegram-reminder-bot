@@ -34,10 +34,12 @@ class TestSettings:
             "SCHEDULER_LOCK_SECONDS",
             "SCHEDULER_SEND_CONCURRENCY",
             "DROP_PENDING_UPDATES",
+            "DB_QUICK_CHECK_ON_STARTUP",
             "HEALTHCHECK_ENABLED",
             "HEALTHCHECK_HOST",
             "HEALTHCHECK_PORT",
             "HEALTHCHECK_PATH",
+            "HEALTHCHECK_CHECK_TIMEOUT_SECONDS",
         ]
         clean_env = {k: "" for k in env_keys if k in os.environ}
         with patch.dict(os.environ, clean_env, clear=False):
@@ -67,11 +69,13 @@ class TestSettings:
         assert s.SCHEDULER_LOCK_SECONDS == 120
         assert s.SCHEDULER_SEND_CONCURRENCY == 5
         assert s.DROP_PENDING_UPDATES is False
+        assert s.DB_QUICK_CHECK_ON_STARTUP is True
         assert s.IMAGE_TAG is None
         assert s.HEALTHCHECK_ENABLED is False
         assert s.HEALTHCHECK_HOST == "127.0.0.1"
         assert s.HEALTHCHECK_PORT == 8080
         assert s.HEALTHCHECK_PATH == "/healthz"
+        assert s.HEALTHCHECK_CHECK_TIMEOUT_SECONDS == 3.0
 
     def test_env_override(self):
         """测试环境变量覆盖"""
@@ -219,6 +223,24 @@ class TestSettingsInstance:
             with pytest.raises(Exception) as excinfo:
                 Settings()
             assert "HEALTHCHECK_PATH" in str(excinfo.value)
+
+    def test_healthcheck_check_timeout_invalid(self):
+        """测试非法健康检查超时"""
+        with patch.dict(os.environ, {"HEALTHCHECK_CHECK_TIMEOUT_SECONDS": "0"}):
+            from src.config import Settings
+
+            with pytest.raises(Exception) as excinfo:
+                Settings()
+            assert "HEALTHCHECK_CHECK_TIMEOUT_SECONDS" in str(excinfo.value)
+
+    def test_database_path_empty(self):
+        """测试空数据库路径"""
+        with patch.dict(os.environ, {"DATABASE_PATH": "   "}):
+            from src.config import Settings
+
+            with pytest.raises(Exception) as excinfo:
+                Settings()
+            assert "DATABASE_PATH" in str(excinfo.value)
 
     def test_instance_lock_path_empty(self):
         """测试空实例锁路径"""

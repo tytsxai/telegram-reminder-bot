@@ -83,6 +83,23 @@ class Database:
         except Exception:
             return False
 
+    async def quick_check(self) -> bool:
+        """执行 SQLite 快速完整性检查。"""
+        try:
+            async with self._connect() as db:
+                cursor = await db.execute("PRAGMA quick_check(1)")
+                row = await cursor.fetchone()
+            result = (
+                "" if row is None or row[0] is None else str(row[0]).strip().lower()
+            )
+            if result != "ok":
+                logger.error("Database quick_check failed: %s", row[0] if row else None)
+                return False
+            return True
+        except Exception as exc:
+            logger.error("Database quick_check error: %s", exc)
+            return False
+
     async def init_db(self) -> None:
         """初始化数据库表"""
         async with self._connect() as db:

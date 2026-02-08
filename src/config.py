@@ -67,10 +67,12 @@ class Settings(BaseSettings):
     SCHEDULER_SEND_CONCURRENCY: int = 5
     DROP_PENDING_UPDATES: bool = False
     IMAGE_TAG: Optional[str] = None
+    DB_QUICK_CHECK_ON_STARTUP: bool = True
     HEALTHCHECK_ENABLED: bool = False
     HEALTHCHECK_HOST: str = "127.0.0.1"
     HEALTHCHECK_PORT: int = 8080
     HEALTHCHECK_PATH: str = "/healthz"
+    HEALTHCHECK_CHECK_TIMEOUT_SECONDS: float = 3.0
 
     # 运行实例锁
     INSTANCE_LOCK_ENABLED: bool = True
@@ -80,6 +82,8 @@ class Settings(BaseSettings):
     def _normalize_database_path(self) -> "Settings":
         if self.DATABASE_URL:
             self.DATABASE_PATH = _sqlite_url_to_path(self.DATABASE_URL)
+        if (self.DATABASE_PATH or "").strip() == "":
+            raise ValueError("DATABASE_PATH must not be empty")
         self.LOG_LEVEL = (self.LOG_LEVEL or "INFO").strip().upper()
         try:
             pytz.timezone(self.TIMEZONE)
@@ -113,6 +117,10 @@ class Settings(BaseSettings):
             raise ValueError("HEALTHCHECK_PATH must start with '/'")
         if " " in self.HEALTHCHECK_PATH:
             raise ValueError("HEALTHCHECK_PATH must not contain spaces")
+        if self.HEALTHCHECK_CHECK_TIMEOUT_SECONDS <= 0:
+            raise ValueError("HEALTHCHECK_CHECK_TIMEOUT_SECONDS must be > 0")
+        if self.HEALTHCHECK_CHECK_TIMEOUT_SECONDS > 30:
+            raise ValueError("HEALTHCHECK_CHECK_TIMEOUT_SECONDS must be <= 30")
         if self.INSTANCE_LOCK_PATH.strip() == "":
             raise ValueError("INSTANCE_LOCK_PATH must not be empty")
         return self

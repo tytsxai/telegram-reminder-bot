@@ -40,6 +40,11 @@ class TestDatabase:
         assert await db.ping() is True
 
     @pytest.mark.asyncio
+    async def test_quick_check(self, db):
+        await db.init_db()
+        assert await db.quick_check() is True
+
+    @pytest.mark.asyncio
     async def test_schema_version(self, db):
         await db.init_db()
         async with aiosqlite.connect(db.db_path) as conn:

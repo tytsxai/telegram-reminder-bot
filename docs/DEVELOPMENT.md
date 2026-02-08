@@ -55,7 +55,8 @@ pytest tests/test_bot.py -v
 
 ### 测试覆盖率要求
 
-- 总体覆盖率 ≥ 80%
+- 总体覆盖率目标 ≥ 80%
+- CI 当前仅执行测试与覆盖率报告；建议在本地或 CI 增加 `ruff check .` 作为质量门槛
 
 ## 代码规范
 
@@ -79,7 +80,13 @@ src/
 
 ```bash
 black .
-ruff check src tests
+ruff check .
+```
+
+建议在提交前执行：
+
+```bash
+pytest tests/ -v --cov=src --cov-report=term
 ```
 
 ## 扩展开发
@@ -137,6 +144,12 @@ class OpenAIParser(AIParser):
 | HEALTHCHECK_PATH | 否 | 健康检查路径 |
 | INSTANCE_LOCK_ENABLED | 否 | 是否启用实例锁（默认开启） |
 | INSTANCE_LOCK_PATH | 否 | 实例锁文件路径 |
+
+约束说明：
+
+- `LOG_LEVEL` 必须为 `CRITICAL/ERROR/WARNING/INFO/DEBUG/NOTSET`
+- `SCHEDULER_SEND_CONCURRENCY` 范围为 `1-50`
+- `HEALTHCHECK_PATH` 必须以 `/` 开头且不能包含空格
 
 ## 常见问题
 

@@ -1,5 +1,5 @@
 """命令测试"""
-import pytest
+
 
 
 class TestCommands:

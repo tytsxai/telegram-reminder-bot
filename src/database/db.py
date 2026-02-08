@@ -240,21 +240,31 @@ class Database:
                     reminder.repeat_type.value,
                     reminder.repeat_weekday,
                     reminder.repeat_monthday,
-                    to_utc_iso(reminder.locked_until)
-                    if reminder.locked_until
-                    else None,
-                    to_utc_iso(reminder.last_sent_at)
-                    if reminder.last_sent_at
-                    else None,
-                    to_utc_iso(reminder.last_sent_for)
-                    if reminder.last_sent_for
-                    else None,
-                    to_utc_iso(reminder.send_attempt_for)
-                    if reminder.send_attempt_for
-                    else None,
-                    to_utc_iso(reminder.send_attempt_until)
-                    if reminder.send_attempt_until
-                    else None,
+                    (
+                        to_utc_iso(reminder.locked_until)
+                        if reminder.locked_until
+                        else None
+                    ),
+                    (
+                        to_utc_iso(reminder.last_sent_at)
+                        if reminder.last_sent_at
+                        else None
+                    ),
+                    (
+                        to_utc_iso(reminder.last_sent_for)
+                        if reminder.last_sent_for
+                        else None
+                    ),
+                    (
+                        to_utc_iso(reminder.send_attempt_for)
+                        if reminder.send_attempt_for
+                        else None
+                    ),
+                    (
+                        to_utc_iso(reminder.send_attempt_until)
+                        if reminder.send_attempt_until
+                        else None
+                    ),
                     1 if reminder.is_active else 0,
                     to_utc_iso(reminder.created_at),
                 ),
@@ -396,21 +406,31 @@ class Database:
                     reminder.repeat_type.value,
                     reminder.repeat_weekday,
                     reminder.repeat_monthday,
-                    to_utc_iso(reminder.locked_until)
-                    if reminder.locked_until
-                    else None,
-                    to_utc_iso(reminder.last_sent_at)
-                    if reminder.last_sent_at
-                    else None,
-                    to_utc_iso(reminder.last_sent_for)
-                    if reminder.last_sent_for
-                    else None,
-                    to_utc_iso(reminder.send_attempt_for)
-                    if reminder.send_attempt_for
-                    else None,
-                    to_utc_iso(reminder.send_attempt_until)
-                    if reminder.send_attempt_until
-                    else None,
+                    (
+                        to_utc_iso(reminder.locked_until)
+                        if reminder.locked_until
+                        else None
+                    ),
+                    (
+                        to_utc_iso(reminder.last_sent_at)
+                        if reminder.last_sent_at
+                        else None
+                    ),
+                    (
+                        to_utc_iso(reminder.last_sent_for)
+                        if reminder.last_sent_for
+                        else None
+                    ),
+                    (
+                        to_utc_iso(reminder.send_attempt_for)
+                        if reminder.send_attempt_for
+                        else None
+                    ),
+                    (
+                        to_utc_iso(reminder.send_attempt_until)
+                        if reminder.send_attempt_until
+                        else None
+                    ),
                     1 if reminder.is_active else 0,
                     reminder.id,
                 ),
@@ -456,21 +476,25 @@ class Database:
             repeat_type=RepeatType(row["repeat_type"]),
             repeat_weekday=row.get("repeat_weekday"),
             repeat_monthday=row.get("repeat_monthday"),
-            locked_until=from_utc_iso(row["locked_until"])
-            if row.get("locked_until")
-            else None,
-            last_sent_at=from_utc_iso(row["last_sent_at"])
-            if row.get("last_sent_at")
-            else None,
-            last_sent_for=from_utc_iso(row["last_sent_for"])
-            if row.get("last_sent_for")
-            else None,
-            send_attempt_for=from_utc_iso(row["send_attempt_for"])
-            if row.get("send_attempt_for")
-            else None,
-            send_attempt_until=from_utc_iso(row["send_attempt_until"])
-            if row.get("send_attempt_until")
-            else None,
+            locked_until=(
+                from_utc_iso(row["locked_until"]) if row.get("locked_until") else None
+            ),
+            last_sent_at=(
+                from_utc_iso(row["last_sent_at"]) if row.get("last_sent_at") else None
+            ),
+            last_sent_for=(
+                from_utc_iso(row["last_sent_for"]) if row.get("last_sent_for") else None
+            ),
+            send_attempt_for=(
+                from_utc_iso(row["send_attempt_for"])
+                if row.get("send_attempt_for")
+                else None
+            ),
+            send_attempt_until=(
+                from_utc_iso(row["send_attempt_until"])
+                if row.get("send_attempt_until")
+                else None
+            ),
             is_active=bool(row["is_active"]),
             created_at=from_utc_iso(row["created_at"]),
         )

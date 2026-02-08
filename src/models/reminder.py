@@ -52,21 +52,21 @@ class Reminder:
             "repeat_weekday": self.repeat_weekday,
             "repeat_monthday": self.repeat_monthday,
             "is_active": self.is_active,
-            "locked_until": self.locked_until.isoformat()
-            if self.locked_until
-            else None,
-            "last_sent_at": self.last_sent_at.isoformat()
-            if self.last_sent_at
-            else None,
-            "last_sent_for": self.last_sent_for.isoformat()
-            if self.last_sent_for
-            else None,
-            "send_attempt_for": self.send_attempt_for.isoformat()
-            if self.send_attempt_for
-            else None,
-            "send_attempt_until": self.send_attempt_until.isoformat()
-            if self.send_attempt_until
-            else None,
+            "locked_until": (
+                self.locked_until.isoformat() if self.locked_until else None
+            ),
+            "last_sent_at": (
+                self.last_sent_at.isoformat() if self.last_sent_at else None
+            ),
+            "last_sent_for": (
+                self.last_sent_for.isoformat() if self.last_sent_for else None
+            ),
+            "send_attempt_for": (
+                self.send_attempt_for.isoformat() if self.send_attempt_for else None
+            ),
+            "send_attempt_until": (
+                self.send_attempt_until.isoformat() if self.send_attempt_until else None
+            ),
             "created_at": self.created_at.isoformat(),
         }
 
@@ -83,20 +83,30 @@ class Reminder:
             repeat_weekday=data.get("repeat_weekday"),
             repeat_monthday=data.get("repeat_monthday"),
             is_active=data.get("is_active", True),
-            locked_until=datetime.fromisoformat(data["locked_until"])
-            if data.get("locked_until")
-            else None,
-            last_sent_at=datetime.fromisoformat(data["last_sent_at"])
-            if data.get("last_sent_at")
-            else None,
-            last_sent_for=datetime.fromisoformat(data["last_sent_for"])
-            if data.get("last_sent_for")
-            else None,
-            send_attempt_for=datetime.fromisoformat(data["send_attempt_for"])
-            if data.get("send_attempt_for")
-            else None,
-            send_attempt_until=datetime.fromisoformat(data["send_attempt_until"])
-            if data.get("send_attempt_until")
-            else None,
+            locked_until=(
+                datetime.fromisoformat(data["locked_until"])
+                if data.get("locked_until")
+                else None
+            ),
+            last_sent_at=(
+                datetime.fromisoformat(data["last_sent_at"])
+                if data.get("last_sent_at")
+                else None
+            ),
+            last_sent_for=(
+                datetime.fromisoformat(data["last_sent_for"])
+                if data.get("last_sent_for")
+                else None
+            ),
+            send_attempt_for=(
+                datetime.fromisoformat(data["send_attempt_for"])
+                if data.get("send_attempt_for")
+                else None
+            ),
+            send_attempt_until=(
+                datetime.fromisoformat(data["send_attempt_until"])
+                if data.get("send_attempt_until")
+                else None
+            ),
             created_at=datetime.fromisoformat(data["created_at"]),
         )

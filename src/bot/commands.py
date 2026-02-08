@@ -116,7 +116,7 @@ class CommandHandler:
             "/remind <内容> - 设置提醒\n"
             "/list [页码] [每页数量] - 查看提醒列表\n"
             "/delete <ID> - 删除提醒（也可直接 /delete 交互输入）\n"
-            "/help - 获取帮助"
+            "/help - 获取帮助",
         )
 
     async def help(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -133,7 +133,7 @@ class CommandHandler:
             "• 每天8点提醒我喝水\n"
             "• 每周一8点提醒我开会\n"
             "• 每月1号8点提醒我交房租\n"
-            "• 后天下午3点提醒我买菜"
+            "• 后天下午3点提醒我买菜",
         )
 
     async def remind(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -153,8 +153,7 @@ class CommandHandler:
 
         if result is None:
             await self._reply(
-                update,
-                "无法解析时间，请使用格式：\n" "明天9点提醒我开会"
+                update, "无法解析时间，请使用格式：\n" "明天9点提醒我开会"
             )
             return
 
@@ -178,10 +177,7 @@ class CommandHandler:
             await self._reply(update, "⚠️ 系统繁忙，请稍后再试")
             return
 
-        await self._reply(
-            update,
-            self._build_created_reply(reminder)
-        )
+        await self._reply(update, self._build_created_reply(reminder))
 
     async def list_reminders(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
@@ -247,7 +243,9 @@ class CommandHandler:
 
         await self._reply_chunks(update, f"📋 提醒列表（第 {page} 页）：", entries)
 
-    async def delete_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    async def delete_start(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> int:
         """处理 /delete 命令入口"""
         ids = self._get_user_chat_ids(update)
         if not ids:
@@ -261,14 +259,18 @@ class CommandHandler:
         await self._reply(update, "请输入提醒ID")
         return DELETE_AWAITING_ID
 
-    async def delete_receive_id(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    async def delete_receive_id(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> int:
         """接收用户输入的提醒 ID"""
         message = update.effective_message or update.message
         if not message or not message.text:
             return ConversationHandler.END
         return await self._do_delete(update, message.text.strip())
 
-    async def delete_cancel(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    async def delete_cancel(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> int:
         """取消删除操作"""
         await self._reply(update, "已取消删除操作")
         return ConversationHandler.END
@@ -294,7 +296,10 @@ class CommandHandler:
         except Exception as exc:
             logger.exception(
                 "Failed to delete reminder id=%s user_id=%s chat_id=%s: %s",
-                reminder_id, user_id, chat_id, exc,
+                reminder_id,
+                user_id,
+                chat_id,
+                exc,
             )
             await self._reply(update, "⚠️ 系统繁忙，请稍后再试")
             return ConversationHandler.END
@@ -345,7 +350,4 @@ class CommandHandler:
             await self._reply(update, "⚠️ 系统繁忙，请稍后再试")
             return
 
-        await self._reply(
-            update,
-            self._build_created_reply(reminder)
-        )
+        await self._reply(update, self._build_created_reply(reminder))

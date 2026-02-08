@@ -142,9 +142,7 @@ class RuleBasedParser(AIParser):
             weekday = self._WEEKDAY_MAP[next_week_match.group(1)]
             remind_at = self._next_weekday(now, weekday, now.hour, now.minute)
 
-        date_match = re.search(
-            r"(\d{4})[年/\-](\d{1,2})[月/\-](\d{1,2})[日号]?", text
-        )
+        date_match = re.search(r"(\d{4})[年/\-](\d{1,2})[月/\-](\d{1,2})[日号]?", text)
         if date_match:
             explicit_date = True
             year, month, day = map(int, date_match.groups())
@@ -512,9 +510,7 @@ class LLMJSONParser(AIParser):
                 repeat_type = RepeatType.MONTHLY
 
         now = self._get_now()
-        explicit_date = bool(
-            re.search(r"\d{4}[年/\-]\d{1,2}[月/\-]\d{1,2}", text)
-        )
+        explicit_date = bool(re.search(r"\d{4}[年/\-]\d{1,2}[月/\-]\d{1,2}", text))
         if repeat_type == RepeatType.NONE and explicit_date and remind_at <= now:
             return None
         remind_at, repeat_weekday, repeat_monthday = self._normalize_result(

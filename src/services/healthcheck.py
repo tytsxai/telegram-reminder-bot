@@ -25,11 +25,15 @@ class HealthCheckServer:
         port: int,
         path: str = "/healthz",
         check: Optional[HealthCheck] = None,
+        read_timeout_seconds: float = 5.0,
+        max_header_lines: int = 100,
     ) -> None:
         self.host = host
         self.port = port
         self.path = path
         self.check = check
+        self.read_timeout_seconds = max(0.1, float(read_timeout_seconds))
+        self.max_header_lines = max(1, int(max_header_lines))
         self._server: Optional[asyncio.AbstractServer] = None
 
     async def start(self) -> None:
@@ -52,7 +56,13 @@ class HealthCheckServer:
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ) -> None:
         try:
-            request_line = await reader.readline()
+            try:
+                request_line = await asyncio.wait_for(
+                    reader.readline(), timeout=self.read_timeout_seconds
+                )
+            except asyncio.TimeoutError:
+                await self._respond(writer, 408, {"ok": False, "status": "request_timeout"})
+                return
             if not request_line:
                 return
             parts = request_line.decode(errors="ignore").strip().split()
@@ -60,10 +70,25 @@ class HealthCheckServer:
             path = parts[1] if len(parts) >= 2 else ""
 
             # Drain headers
+            header_count = 0
             while True:
-                line = await reader.readline()
+                try:
+                    line = await asyncio.wait_for(
+                        reader.readline(), timeout=self.read_timeout_seconds
+                    )
+                except asyncio.TimeoutError:
+                    await self._respond(
+                        writer, 408, {"ok": False, "status": "request_timeout"}
+                    )
+                    return
                 if not line or line in (b"\r\n", b"\n"):
                     break
+                header_count += 1
+                if header_count > self.max_header_lines:
+                    await self._respond(
+                        writer, 400, {"ok": False, "status": "too_many_headers"}
+                    )
+                    return
 
             if method not in {"GET", "HEAD"}:
                 await self._respond(
@@ -116,8 +141,10 @@ class HealthCheckServer:
         body = json.dumps(payload, ensure_ascii=True).encode("utf-8")
         reason = {
             200: "OK",
+            400: "Bad Request",
             404: "Not Found",
             405: "Method Not Allowed",
+            408: "Request Timeout",
             503: "Service Unavailable",
         }.get(status_code, "OK")
         headers = [

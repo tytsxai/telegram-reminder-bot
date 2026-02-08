@@ -109,3 +109,41 @@ async def test_healthcheck_head_request_has_no_body():
     head, body = data.split(b"\r\n\r\n", 1)
     assert b"Content-Length: 0" in head
     assert body == b""
+
+
+@pytest.mark.asyncio
+async def test_healthcheck_timeout_on_partial_request():
+    server = HealthCheckServer("127.0.0.1", 0, read_timeout_seconds=0.05)
+    await server.start()
+    try:
+        reader, writer = await asyncio.open_connection("127.0.0.1", server.port)
+        writer.write(b"GET /healthz HTTP/1.1\r\n")
+        await writer.drain()
+        data = await reader.read()
+        writer.close()
+        await writer.wait_closed()
+    finally:
+        await server.stop()
+
+    assert b"408 Request Timeout" in data
+
+
+@pytest.mark.asyncio
+async def test_healthcheck_too_many_headers():
+    server = HealthCheckServer("127.0.0.1", 0, max_header_lines=2)
+    await server.start()
+    try:
+        data = await _fetch_raw(
+            server,
+            (
+                b"GET /healthz HTTP/1.1\r\n"
+                b"Host: localhost\r\n"
+                b"X-A: 1\r\n"
+                b"X-B: 2\r\n"
+                b"\r\n"
+            ),
+        )
+    finally:
+        await server.stop()
+
+    assert b"400 Bad Request" in data

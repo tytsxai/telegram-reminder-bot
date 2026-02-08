@@ -26,6 +26,8 @@ def parse_args() -> argparse.Namespace:
 
 def backup(db_path: str, out_dir: str, keep: int) -> Path:
     src_path = Path(db_path).expanduser()
+    if keep < 0:
+        raise ValueError("keep must be >= 0")
     if db_path == ":memory:":
         raise ValueError("In-memory database cannot be backed up")
     if not src_path.exists():
@@ -33,7 +35,9 @@ def backup(db_path: str, out_dir: str, keep: int) -> Path:
     if src_path.is_dir():
         raise IsADirectoryError(f"Database path is a directory: {src_path}")
 
-    out_path = Path(out_dir)
+    out_path = Path(out_dir).expanduser()
+    if out_path.exists() and not out_path.is_dir():
+        raise NotADirectoryError(f"Backup output path is not a directory: {out_path}")
     out_path.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     backup_path = out_path / f"reminders_{timestamp}.db"
@@ -48,6 +52,7 @@ def backup(db_path: str, out_dir: str, keep: int) -> Path:
         src.close()
 
     _prune_backups(out_path, keep)
+    backup_path.chmod(0o600)
     return backup_path
 
 

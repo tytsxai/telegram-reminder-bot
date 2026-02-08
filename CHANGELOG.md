@@ -1,5 +1,19 @@
 # 变更记录
 
+## [0.3.6] - 2026-02-08
+
+### Added
+- 启动阶段新增数据库快速完整性检查（`PRAGMA quick_check`），默认开启（`DB_QUICK_CHECK_ON_STARTUP=true`）
+- 数据库接口新增 `Database.quick_check()`，用于运维与启动自检
+- 新增上线前自检脚本 `scripts/preflight.py`（BOT_TOKEN/数据库路径/DB 连通与 quick_check）
+
+### Changed
+- 健康检查内部 DB ping 增加独立超时控制（`HEALTHCHECK_CHECK_TIMEOUT_SECONDS`，默认 3 秒），避免探针调用卡住
+- 配置校验增强：`DATABASE_PATH` 不能为空、健康检查超时范围限制为 `(0, 30]`
+
+### Documentation
+- README/部署/运维/故障排查/API/架构文档同步新增启动快检与健康检查超时说明
+
 ## [0.3.5] - 2026-02-08
 
 ### Added

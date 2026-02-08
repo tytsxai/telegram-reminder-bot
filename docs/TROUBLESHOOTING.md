@@ -17,6 +17,7 @@
 - 检查数据库路径是否可写，磁盘空间是否充足。
 - 若返回 `scheduler_unhealthy`，检查调度器是否卡住或事件循环阻塞。
 - 查看日志中的 `db_error` / `scheduler_unhealthy` 相关信息。
+- 若日志包含 `Healthcheck db ping timeout`，适当上调 `HEALTHCHECK_CHECK_TIMEOUT_SECONDS`（建议 3-10 秒）。
 
 ## 时区报错
 
@@ -28,6 +29,13 @@
 - 确认数据库文件权限可写。
 - 避免多个实例同时写同一个 SQLite 文件。
 - 若需多实例部署，建议迁移到外部数据库。
+
+## 启动时报 database quick check failed
+
+- 含义：启动阶段执行 `PRAGMA quick_check(1)` 失败，数据库可能损坏或不可读。
+- 先停止自动拉起，避免反复重启刷屏。
+- 执行：`sqlite3 /path/to/reminders.db "PRAGMA integrity_check;"`。
+- 若结果非 `ok`，使用最近备份恢复，再重启服务。
 
 ## AI 解析失败
 

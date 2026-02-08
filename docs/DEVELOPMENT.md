@@ -138,10 +138,12 @@ class OpenAIParser(AIParser):
 | SCHEDULER_LOCK_SECONDS | 否 | 调度锁定时长（秒） |
 | SCHEDULER_SEND_CONCURRENCY | 否 | 并发发送上限 |
 | DROP_PENDING_UPDATES | 否 | 是否丢弃积压更新（避免宕机后消息洪峰） |
+| DB_QUICK_CHECK_ON_STARTUP | 否 | 启动时是否执行 SQLite `PRAGMA quick_check`（默认 true） |
 | HEALTHCHECK_ENABLED | 否 | 是否启用健康检查 |
 | HEALTHCHECK_HOST | 否 | 健康检查监听地址 |
 | HEALTHCHECK_PORT | 否 | 健康检查端口 |
 | HEALTHCHECK_PATH | 否 | 健康检查路径 |
+| HEALTHCHECK_CHECK_TIMEOUT_SECONDS | 否 | 健康检查内部 DB ping 超时秒数（默认 3） |
 | INSTANCE_LOCK_ENABLED | 否 | 是否启用实例锁（默认开启） |
 | INSTANCE_LOCK_PATH | 否 | 实例锁文件路径 |
 
@@ -150,6 +152,8 @@ class OpenAIParser(AIParser):
 - `LOG_LEVEL` 必须为 `CRITICAL/ERROR/WARNING/INFO/DEBUG/NOTSET`
 - `SCHEDULER_SEND_CONCURRENCY` 范围为 `1-50`
 - `HEALTHCHECK_PATH` 必须以 `/` 开头且不能包含空格
+- `HEALTHCHECK_CHECK_TIMEOUT_SECONDS` 范围为 `(0, 30]`
+- `DATABASE_PATH` 不能为空字符串
 
 ## 常见问题
 

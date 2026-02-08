@@ -81,6 +81,7 @@ db = Database(db_path="reminders.db")
 | `delete_reminder()` | id: int | bool | 删除提醒 |
 | `delete_reminder_by_user()` | id: int, user_id: int, chat_id: int | bool | 按用户删除提醒 |
 | `ping()` | - | bool | 数据库连通性检查 |
+| `quick_check()` | - | bool | SQLite 快速完整性检查（`PRAGMA quick_check`） |
 
 **示例：**
 

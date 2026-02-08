@@ -40,10 +40,12 @@ SCHEDULER_BATCH_SIZE=200
 SCHEDULER_LOCK_SECONDS=120
 SCHEDULER_SEND_CONCURRENCY=5
 DROP_PENDING_UPDATES=false
+DB_QUICK_CHECK_ON_STARTUP=true
 HEALTHCHECK_ENABLED=true
 HEALTHCHECK_HOST=0.0.0.0
 HEALTHCHECK_PORT=8080
 HEALTHCHECK_PATH=/healthz
+HEALTHCHECK_CHECK_TIMEOUT_SECONDS=3
 ```
 
 > 建议使用系统的密钥管理方案（如 systemd drop-in、容器 secret、环境变量注入）。
@@ -55,7 +57,16 @@ source venv/bin/activate
 python main.py
 ```
 
+建议先执行上线前自检（失败即停止发布）：
+
+```bash
+python scripts/preflight.py
+```
+
 首次启动会自动初始化数据库并执行迁移。
+
+默认会执行一次 SQLite `PRAGMA quick_check(1)` 快速完整性检查；
+若校验失败，进程会直接退出并由进程守护器拉起，避免带损坏数据继续运行。
 
 默认启用实例锁，确保只运行一个实例（防止重复提醒）。
 
@@ -106,6 +117,7 @@ After=network.target
 Type=simple
 WorkingDirectory=/opt/reminder-bot
 EnvironmentFile=/opt/reminder-bot/.env
+ExecStartPre=/opt/reminder-bot/venv/bin/python /opt/reminder-bot/scripts/preflight.py
 ExecStart=/opt/reminder-bot/venv/bin/python /opt/reminder-bot/main.py
 Restart=always
 RestartSec=5
@@ -133,6 +145,8 @@ sudo systemctl start reminder-bot
 - 使用非 root 用户运行服务。
 - 配置日志采集与保留策略。
 - 配置外部监控，定期探测健康检查端点。
+- 配置进程重启策略（systemd `Restart=always` / 容器 `restart: unless-stopped`）。
+- 明确回滚入口：保留最近可用镜像与最近一次可恢复数据库备份。
 - 参考 `docs/OPERATIONS.md` 的运行手册。
 
 ## Docker 部署

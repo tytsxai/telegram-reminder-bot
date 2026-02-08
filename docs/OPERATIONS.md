@@ -31,10 +31,19 @@ docker-compose logs -f
 - `.env` 已配置并可读取
 - `BOT_TOKEN` 正确
 - `DATABASE_PATH` 指向可写路径
+- 启动日志出现 `Database quick check passed`
 - Docker 部署已挂载持久化卷（/app/data）
 - 仅单实例运行（默认启用实例锁）
 - 已确认是否需要丢弃积压更新（`DROP_PENDING_UPDATES`）
 - 健康检查开启（可选）
+
+上线前建议执行：
+
+```bash
+python scripts/preflight.py
+```
+
+返回 `{"ok": true}` 才继续发布。
 
 ## 备份
 
@@ -134,9 +143,16 @@ curl http://127.0.0.1:8080/healthz
 
 - 健康检查请求读取有超时保护，超时会返回 `408 request_timeout`。
 - 单请求头数量有限制（默认最多 100 行），超过会返回 `400 too_many_headers`。
+- 健康检查内部 DB ping 有独立超时（`HEALTHCHECK_CHECK_TIMEOUT_SECONDS`），超时后返回 `db_error`。
 
 健康检查响应会包含调度器状态与延迟信息（`scheduler_ok`/`scheduler`），
 当调度器卡住或停止时会返回 `scheduler_unhealthy`。
+
+## 关键告警与处置
+
+- `status=db_error`：优先检查数据库文件权限、磁盘空间、I/O 错误；必要时从最近备份恢复。
+- `status=scheduler_unhealthy`：先重启进程；若持续复发，检查事件循环阻塞与 Telegram API 异常。
+- 启动失败且日志包含 `database quick check failed`：停止自动重启，执行 SQLite 完整检查并走恢复流程。
 
 ## 日志管理
 

@@ -70,12 +70,14 @@ SCHEDULER_BATCH_SIZE=200
 SCHEDULER_LOCK_SECONDS=120
 SCHEDULER_SEND_CONCURRENCY=5
 DROP_PENDING_UPDATES=false
+DB_QUICK_CHECK_ON_STARTUP=true
 
 # 监控端点（可选）
 HEALTHCHECK_ENABLED=false
 HEALTHCHECK_HOST=127.0.0.1
 HEALTHCHECK_PORT=8080
 HEALTHCHECK_PATH=/healthz
+HEALTHCHECK_CHECK_TIMEOUT_SECONDS=3
 
 # 实例锁（默认开启，防止重复运行）
 INSTANCE_LOCK_ENABLED=true
@@ -93,6 +95,7 @@ DATABASE_URL=sqlite+aiosqlite:///./reminders.db
 
 ```bash
 source venv/bin/activate
+python scripts/preflight.py
 python main.py
 ```
 

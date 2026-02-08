@@ -130,6 +130,11 @@ curl http://127.0.0.1:8080/healthz
 
 返回 `ok=false` 时应触发告警。
 
+实现细节（用于防止探针连接异常拖垮服务）：
+
+- 健康检查请求读取有超时保护，超时会返回 `408 request_timeout`。
+- 单请求头数量有限制（默认最多 100 行），超过会返回 `400 too_many_headers`。
+
 健康检查响应会包含调度器状态与延迟信息（`scheduler_ok`/`scheduler`），
 当调度器卡住或停止时会返回 `scheduler_unhealthy`。
 

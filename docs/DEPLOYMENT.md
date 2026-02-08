@@ -81,6 +81,12 @@ curl http://127.0.0.1:8080/healthz
 python scripts/backup_db.py --db /path/to/reminders.db --out-dir /var/backups/reminder --keep 7
 ```
 
+注意事项：
+
+- `--keep` 必须为 `>= 0` 的整数（`0` 表示不执行历史清理）。
+- `--out-dir` 必须是目录路径；若路径已存在但不是目录，脚本会失败退出。
+- 备份文件权限默认设置为 `600`（仅当前用户可读写），避免数据泄露。
+
 恢复流程：
 
 1) 停止服务  

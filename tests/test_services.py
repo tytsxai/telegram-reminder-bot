@@ -150,11 +150,21 @@ class TestSchedulerService:
     def test_start_stop_calls_scheduler(self, db):
         scheduler = SchedulerService(db)
         scheduler.scheduler = MagicMock()
+        scheduler.scheduler.running = False
         scheduler.start()
         assert scheduler.scheduler.add_job.called
         scheduler.scheduler.start.assert_called_once()
+        scheduler.scheduler.running = True
         scheduler.stop()
-        scheduler.scheduler.shutdown.assert_called_once()
+        scheduler.scheduler.shutdown.assert_called_once_with(wait=False)
+
+    def test_start_skips_when_running(self, db):
+        scheduler = SchedulerService(db)
+        scheduler.scheduler = MagicMock()
+        scheduler.scheduler.running = True
+        scheduler.start()
+        scheduler.scheduler.add_job.assert_not_called()
+        scheduler.scheduler.start.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_check_reminders(self, db):

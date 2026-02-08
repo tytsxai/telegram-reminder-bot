@@ -25,10 +25,21 @@ class InstanceLock:
         if not self.path:
             logger.error("Instance lock path is empty")
             return False
-        dir_name = os.path.dirname(self.path)
+        lock_path = os.path.expanduser(self.path)
+        dir_name = os.path.dirname(lock_path)
         if dir_name:
-            os.makedirs(dir_name, exist_ok=True)
-        self._fh = open(self.path, "a+", encoding="utf-8")
+            try:
+                os.makedirs(dir_name, exist_ok=True)
+            except OSError as exc:
+                logger.error(
+                    "Failed to create instance lock directory %s: %s", dir_name, exc
+                )
+                return False
+        try:
+            self._fh = open(lock_path, "a+", encoding="utf-8")
+        except OSError as exc:
+            logger.error("Failed to open instance lock file %s: %s", lock_path, exc)
+            return False
         try:
             if os.name == "nt":
                 import msvcrt

@@ -23,6 +23,16 @@ def test_instance_lock_creates_directory(tmp_path):
     lock.release()
 
 
+def test_instance_lock_expands_user_home(monkeypatch, tmp_path):
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    lock = InstanceLock("~/locks/reminder.lock")
+    assert lock.acquire() is True
+    assert (home / "locks" / "reminder.lock").exists()
+    lock.release()
+
+
 def test_instance_lock_empty_path():
     lock = InstanceLock("")
     assert lock.acquire() is False

@@ -13,14 +13,31 @@ class TestSettings:
         """测试默认值"""
         # 清除可能存在的环境变量以测试真正的默认值
         env_keys = [
-            "BOT_TOKEN", "DATABASE_PATH", "DATABASE_URL", "TIMEZONE",
-            "AI_API_KEY", "AI_MODEL", "AI_BASE_URL", "AI_PROVIDER",
-            "OPENAI_API_KEY", "OPENAI_MODEL", "OPENAI_BASE_URL",
-            "ANTHROPIC_API_KEY", "ANTHROPIC_MODEL", "ANTHROPIC_BASE_URL",
-            "LOG_LEVEL", "SCHEDULER_INTERVAL_SECONDS", "IMAGE_TAG",
-            "SCHEDULER_BATCH_SIZE", "SCHEDULER_LOCK_SECONDS", "SCHEDULER_SEND_CONCURRENCY",
+            "BOT_TOKEN",
+            "DATABASE_PATH",
+            "DATABASE_URL",
+            "TIMEZONE",
+            "AI_API_KEY",
+            "AI_MODEL",
+            "AI_BASE_URL",
+            "AI_PROVIDER",
+            "OPENAI_API_KEY",
+            "OPENAI_MODEL",
+            "OPENAI_BASE_URL",
+            "ANTHROPIC_API_KEY",
+            "ANTHROPIC_MODEL",
+            "ANTHROPIC_BASE_URL",
+            "LOG_LEVEL",
+            "SCHEDULER_INTERVAL_SECONDS",
+            "IMAGE_TAG",
+            "SCHEDULER_BATCH_SIZE",
+            "SCHEDULER_LOCK_SECONDS",
+            "SCHEDULER_SEND_CONCURRENCY",
             "DROP_PENDING_UPDATES",
-            "HEALTHCHECK_ENABLED", "HEALTHCHECK_HOST", "HEALTHCHECK_PORT", "HEALTHCHECK_PATH",
+            "HEALTHCHECK_ENABLED",
+            "HEALTHCHECK_HOST",
+            "HEALTHCHECK_PORT",
+            "HEALTHCHECK_PATH",
         ]
         clean_env = {k: "" for k in env_keys if k in os.environ}
         with patch.dict(os.environ, clean_env, clear=False):
@@ -101,6 +118,23 @@ class TestSettings:
             s = Settings()
             assert s.DATABASE_PATH == "./reminders.db"
 
+    def test_log_level_normalize(self):
+        """测试日志级别标准化"""
+        with patch.dict(os.environ, {"LOG_LEVEL": "debug"}):
+            from src.config import Settings
+
+            s = Settings()
+            assert s.LOG_LEVEL == "DEBUG"
+
+    def test_log_level_invalid(self):
+        """测试非法日志级别"""
+        with patch.dict(os.environ, {"LOG_LEVEL": "VERBOSE"}):
+            from src.config import Settings
+
+            with pytest.raises(Exception) as excinfo:
+                Settings()
+            assert "LOG_LEVEL" in str(excinfo.value)
+
 
 class TestSettingsInstance:
     """settings 实例测试"""
@@ -118,6 +152,7 @@ class TestSettingsInstance:
         """测试非法调度间隔"""
         with patch.dict(os.environ, {"SCHEDULER_INTERVAL_SECONDS": "0"}):
             from src.config import Settings
+
             with pytest.raises(Exception) as excinfo:
                 Settings()
             assert "SCHEDULER_INTERVAL_SECONDS" in str(excinfo.value)
@@ -126,6 +161,7 @@ class TestSettingsInstance:
         """测试非法调度批量大小"""
         with patch.dict(os.environ, {"SCHEDULER_BATCH_SIZE": "0"}):
             from src.config import Settings
+
             with pytest.raises(Exception) as excinfo:
                 Settings()
             assert "SCHEDULER_BATCH_SIZE" in str(excinfo.value)
@@ -134,6 +170,7 @@ class TestSettingsInstance:
         """测试非法调度锁定时长"""
         with patch.dict(os.environ, {"SCHEDULER_LOCK_SECONDS": "0"}):
             from src.config import Settings
+
             with pytest.raises(Exception) as excinfo:
                 Settings()
             assert "SCHEDULER_LOCK_SECONDS" in str(excinfo.value)
@@ -142,6 +179,7 @@ class TestSettingsInstance:
         """测试非法发送并发数"""
         with patch.dict(os.environ, {"SCHEDULER_SEND_CONCURRENCY": "0"}):
             from src.config import Settings
+
             with pytest.raises(Exception) as excinfo:
                 Settings()
             assert "SCHEDULER_SEND_CONCURRENCY" in str(excinfo.value)
@@ -150,6 +188,7 @@ class TestSettingsInstance:
         """测试非法端口号（过低）"""
         with patch.dict(os.environ, {"HEALTHCHECK_PORT": "0"}):
             from src.config import Settings
+
             with pytest.raises(Exception) as excinfo:
                 Settings()
             assert "HEALTHCHECK_PORT" in str(excinfo.value)
@@ -158,6 +197,7 @@ class TestSettingsInstance:
         """测试非法端口号（过高）"""
         with patch.dict(os.environ, {"HEALTHCHECK_PORT": "70000"}):
             from src.config import Settings
+
             with pytest.raises(Exception) as excinfo:
                 Settings()
             assert "HEALTHCHECK_PORT" in str(excinfo.value)
@@ -166,6 +206,16 @@ class TestSettingsInstance:
         """测试非法健康检查路径"""
         with patch.dict(os.environ, {"HEALTHCHECK_PATH": "healthz"}):
             from src.config import Settings
+
+            with pytest.raises(Exception) as excinfo:
+                Settings()
+            assert "HEALTHCHECK_PATH" in str(excinfo.value)
+
+    def test_healthcheck_path_with_space(self):
+        """测试健康检查路径包含空格"""
+        with patch.dict(os.environ, {"HEALTHCHECK_PATH": "/health z"}):
+            from src.config import Settings
+
             with pytest.raises(Exception) as excinfo:
                 Settings()
             assert "HEALTHCHECK_PATH" in str(excinfo.value)
@@ -174,6 +224,16 @@ class TestSettingsInstance:
         """测试空实例锁路径"""
         with patch.dict(os.environ, {"INSTANCE_LOCK_PATH": "   "}):
             from src.config import Settings
+
             with pytest.raises(Exception) as excinfo:
                 Settings()
             assert "INSTANCE_LOCK_PATH" in str(excinfo.value)
+
+    def test_scheduler_send_concurrency_too_large(self):
+        """测试发送并发数过大"""
+        with patch.dict(os.environ, {"SCHEDULER_SEND_CONCURRENCY": "51"}):
+            from src.config import Settings
+
+            with pytest.raises(Exception) as excinfo:
+                Settings()
+            assert "SCHEDULER_SEND_CONCURRENCY" in str(excinfo.value)

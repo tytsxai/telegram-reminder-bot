@@ -1,6 +1,5 @@
 """智能提醒机器人入口"""
 
-import asyncio
 import logging
 import os
 from pathlib import Path
@@ -96,8 +95,12 @@ async def send_reminder(chat_id: int, message: str):
 async def post_init(application: Application):
     """应用初始化后的回调"""
     global scheduler, health_server
-    await db.init_db()
-    logger.info("Database initialized")
+    try:
+        await db.init_db()
+        logger.info("Database initialized")
+    except Exception as exc:
+        logger.exception("Database init failed: %s", exc)
+        raise
 
     try:
         await application.bot.set_my_commands(
@@ -114,8 +117,12 @@ async def post_init(application: Application):
         logger.warning("Failed to register bot commands: %s", exc)
 
     scheduler = SchedulerService(db, send_reminder)
-    scheduler.start()
-    logger.info("Scheduler started")
+    try:
+        scheduler.start()
+        logger.info("Scheduler started")
+    except Exception as exc:
+        logger.exception("Scheduler failed to start: %s", exc)
+        raise
 
     if settings.HEALTHCHECK_ENABLED:
 
@@ -145,8 +152,21 @@ async def post_init(application: Application):
             path=settings.HEALTHCHECK_PATH,
             check=_health_check,
         )
-        await health_server.start()
-        logger.info("Healthcheck started")
+        try:
+            await health_server.start()
+            logger.info("Healthcheck started")
+        except Exception as exc:
+            if scheduler:
+                try:
+                    scheduler.stop()
+                except Exception as stop_exc:
+                    logger.warning(
+                        "Scheduler cleanup failed after healthcheck start error: %s",
+                        stop_exc,
+                    )
+                scheduler = None
+            logger.exception("Healthcheck failed to start: %s", exc)
+            raise
 
 
 async def post_shutdown(application: Application):
@@ -154,14 +174,17 @@ async def post_shutdown(application: Application):
     global scheduler, health_server, instance_lock
     if scheduler:
         logger.info("Stopping scheduler, waiting for in-flight tasks...")
-        scheduler.stop()
-        # 等待正在处理的任务完成（最多等待 lock_seconds）
-        wait_seconds = min(settings.SCHEDULER_LOCK_SECONDS, 30)
-        await asyncio.sleep(wait_seconds)
-        logger.info("Scheduler stopped")
+        try:
+            scheduler.stop()
+            logger.info("Scheduler stopped")
+        except Exception as exc:
+            logger.warning("Scheduler stop failed: %s", exc)
         scheduler = None
     if health_server:
-        await health_server.stop()
+        try:
+            await health_server.stop()
+        except Exception as exc:
+            logger.warning("Healthcheck stop failed: %s", exc)
         health_server = None
     if instance_lock:
         instance_lock.release()

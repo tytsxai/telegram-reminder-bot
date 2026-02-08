@@ -27,7 +27,13 @@ def _sqlite_url_to_path(url: str) -> str:
 class Settings(BaseSettings):
     """应用配置"""
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        env_prefix="",
+        case_sensitive=False,
+        extra="ignore",
+    )
 
     # Telegram Bot
     BOT_TOKEN: str = ""
@@ -74,10 +80,23 @@ class Settings(BaseSettings):
     def _normalize_database_path(self) -> "Settings":
         if self.DATABASE_URL:
             self.DATABASE_PATH = _sqlite_url_to_path(self.DATABASE_URL)
+        self.LOG_LEVEL = (self.LOG_LEVEL or "INFO").strip().upper()
         try:
             pytz.timezone(self.TIMEZONE)
         except Exception as exc:
             raise ValueError(f"Invalid TIMEZONE: {self.TIMEZONE}") from exc
+        if self.LOG_LEVEL not in {
+            "CRITICAL",
+            "ERROR",
+            "WARNING",
+            "INFO",
+            "DEBUG",
+            "NOTSET",
+        }:
+            raise ValueError(
+                "LOG_LEVEL must be one of: "
+                "CRITICAL, ERROR, WARNING, INFO, DEBUG, NOTSET"
+            )
         if self.SCHEDULER_INTERVAL_SECONDS <= 0:
             raise ValueError("SCHEDULER_INTERVAL_SECONDS must be > 0")
         if self.SCHEDULER_BATCH_SIZE <= 0:
@@ -86,10 +105,14 @@ class Settings(BaseSettings):
             raise ValueError("SCHEDULER_LOCK_SECONDS must be > 0")
         if self.SCHEDULER_SEND_CONCURRENCY <= 0:
             raise ValueError("SCHEDULER_SEND_CONCURRENCY must be > 0")
+        if self.SCHEDULER_SEND_CONCURRENCY > 50:
+            raise ValueError("SCHEDULER_SEND_CONCURRENCY must be <= 50")
         if not (1 <= self.HEALTHCHECK_PORT <= 65535):
             raise ValueError("HEALTHCHECK_PORT must be between 1 and 65535")
         if not self.HEALTHCHECK_PATH.startswith("/"):
             raise ValueError("HEALTHCHECK_PATH must start with '/'")
+        if " " in self.HEALTHCHECK_PATH:
+            raise ValueError("HEALTHCHECK_PATH must not contain spaces")
         if self.INSTANCE_LOCK_PATH.strip() == "":
             raise ValueError("INSTANCE_LOCK_PATH must not be empty")
         return self

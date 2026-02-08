@@ -92,3 +92,20 @@ async def test_healthcheck_boolean_payload():
         await server.stop()
 
     assert b"503 Service Unavailable" in data
+
+
+@pytest.mark.asyncio
+async def test_healthcheck_head_request_has_no_body():
+    server = HealthCheckServer("127.0.0.1", 0)
+    await server.start()
+    try:
+        data = await _fetch_raw(
+            server, b"HEAD /healthz HTTP/1.1\r\nHost: localhost\r\n\r\n"
+        )
+    finally:
+        await server.stop()
+
+    assert b"200 OK" in data
+    head, body = data.split(b"\r\n\r\n", 1)
+    assert b"Content-Length: 0" in head
+    assert body == b""

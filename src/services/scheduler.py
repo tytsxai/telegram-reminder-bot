@@ -78,9 +78,7 @@ class SchedulerService:
         last_tick = self._last_tick_at.isoformat() if self._last_tick_at else None
         lag_seconds = None
         if self._last_tick_at is not None:
-            lag_seconds = max(
-                0, (now_utc() - self._last_tick_at).total_seconds()
-            )
+            lag_seconds = max(0, (now_utc() - self._last_tick_at).total_seconds())
         return {
             "running": self.scheduler.running,
             "interval_seconds": self.interval_seconds,
@@ -95,6 +93,9 @@ class SchedulerService:
 
     def start(self):
         """启动调度器"""
+        if self.scheduler.running:
+            logger.info("Scheduler already running, skip duplicate start")
+            return
         self.scheduler.add_job(
             self._check_reminders,
             IntervalTrigger(seconds=self.interval_seconds),
@@ -108,7 +109,7 @@ class SchedulerService:
     def stop(self):
         """停止调度器"""
         if self.scheduler.running:
-            self.scheduler.shutdown()
+            self.scheduler.shutdown(wait=False)
 
     async def _check_reminders(self):
         """检查并发送到期提醒"""
@@ -244,9 +245,7 @@ class SchedulerService:
         if not self.send_callback:
             return True
         try:
-            await self.send_callback(
-                reminder.chat_id, self._build_message(reminder)
-            )
+            await self.send_callback(reminder.chat_id, self._build_message(reminder))
             logger.info("Sent reminder id=%s chat_id=%s", reminder.id, reminder.chat_id)
             self._send_success += 1
             return True

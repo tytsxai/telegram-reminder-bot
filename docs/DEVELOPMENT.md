@@ -56,7 +56,8 @@ pytest tests/test_bot.py -v
 ### 测试覆盖率要求
 
 - 总体覆盖率目标 ≥ 80%
-- CI 当前仅执行测试与覆盖率报告；建议在本地或 CI 增加 `ruff check .` 作为质量门槛
+- CI 强制门槛：`--cov-fail-under=70`
+- CI 会执行 `ruff check .` 与 `preflight.py` 烟囱检查
 
 ## 代码规范
 
@@ -87,6 +88,12 @@ ruff check .
 
 ```bash
 pytest tests/ -v --cov=src --cov-report=term
+```
+
+生产相关脚本建议也纳入回归：
+
+```bash
+pytest tests/test_preflight.py tests/test_backup_db.py tests/test_restore_db.py -v
 ```
 
 ## 扩展开发
@@ -137,9 +144,10 @@ class OpenAIParser(AIParser):
 | SCHEDULER_BATCH_SIZE | 否 | 单次调度批量领取条数 |
 | SCHEDULER_LOCK_SECONDS | 否 | 调度锁定时长（秒） |
 | SCHEDULER_SEND_CONCURRENCY | 否 | 并发发送上限 |
+| SCHEDULER_SEND_TIMEOUT_SECONDS | 否 | 单次发送超时保护（秒） |
 | DROP_PENDING_UPDATES | 否 | 是否丢弃积压更新（避免宕机后消息洪峰） |
 | DB_QUICK_CHECK_ON_STARTUP | 否 | 启动时是否执行 SQLite `PRAGMA quick_check`（默认 true） |
-| HEALTHCHECK_ENABLED | 否 | 是否启用健康检查 |
+| HEALTHCHECK_ENABLED | 否 | 是否启用健康检查（默认 true） |
 | HEALTHCHECK_HOST | 否 | 健康检查监听地址 |
 | HEALTHCHECK_PORT | 否 | 健康检查端口 |
 | HEALTHCHECK_PATH | 否 | 健康检查路径 |
@@ -151,6 +159,8 @@ class OpenAIParser(AIParser):
 
 - `LOG_LEVEL` 必须为 `CRITICAL/ERROR/WARNING/INFO/DEBUG/NOTSET`
 - `SCHEDULER_SEND_CONCURRENCY` 范围为 `1-50`
+- `SCHEDULER_SEND_TIMEOUT_SECONDS` 范围为 `(0, 300]`
+- `SCHEDULER_LOCK_SECONDS` 必须 `>= SCHEDULER_SEND_TIMEOUT_SECONDS`
 - `HEALTHCHECK_PATH` 必须以 `/` 开头且不能包含空格
 - `HEALTHCHECK_CHECK_TIMEOUT_SECONDS` 范围为 `(0, 30]`
 - `DATABASE_PATH` 不能为空字符串
@@ -170,4 +180,18 @@ class OpenAIParser(AIParser):
 # 清理缓存
 rm -rf __pycache__ .pytest_cache
 pytest tests/ -v
+```
+
+### Q: 如何验证上线前检查逻辑？
+
+```bash
+python scripts/preflight.py --help
+python scripts/preflight.py --strict-warnings
+```
+
+### Q: 如何本地演练恢复流程？
+
+```bash
+python scripts/backup_db.py --db ./reminders.db --out-dir ./backups --keep 3
+python scripts/restore_db.py --db ./reminders.db --from ./backups/reminders_xxx.db --snapshot-dir ./backups/pre-restore
 ```

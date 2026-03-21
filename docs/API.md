@@ -136,16 +136,19 @@ scheduler.start()
 | 方法 | 说明 |
 |------|------|
 | `start()` | 启动调度器 |
-| `stop()` | 停止调度器 |
+| `stop(wait=True)` | 停止调度器（默认等待在途任务完成） |
+| `is_healthy()` | 返回调度器健康状态（bool） |
+| `health_snapshot()` | 返回调度器健康快照（dict） |
 
-**配置参数（通过环境变量）：**
+**配置参数（通过环境变量映射）：**
 
-| 参数 | 说明 |
-|------|------|
-| `interval_seconds` | 扫描间隔（秒），默认 30 |
-| `batch_size` | 单次批量领取条数，默认 200 |
-| `lock_seconds` | 锁定时长（秒），默认 120 |
-| `send_concurrency` | 并发发送上限，默认 5 |
+| 运行参数 | 环境变量 | 说明 |
+|------|------|------|
+| `interval_seconds` | `SCHEDULER_INTERVAL_SECONDS` | 扫描间隔（秒），默认 30 |
+| `batch_size` | `SCHEDULER_BATCH_SIZE` | 单次批量领取条数，默认 200 |
+| `lock_seconds` | `SCHEDULER_LOCK_SECONDS` | 锁定时长（秒），默认 120 |
+| `send_concurrency` | `SCHEDULER_SEND_CONCURRENCY` | 并发发送上限，默认 5 |
+| `send_timeout_seconds` | `SCHEDULER_SEND_TIMEOUT_SECONDS` | 单次发送超时保护（秒），默认 30 |
 
 ### HealthCheckServer 类
 
@@ -160,6 +163,70 @@ await server.start()
 |------|------|
 | `start()` | 启动健康检查 HTTP 服务 |
 | `stop()` | 停止健康检查服务 |
+
+健康检查返回 payload 关键字段：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `ok` | bool | 整体健康状态 |
+| `status` | str | `ok | db_error | scheduler_unhealthy` |
+| `db_status` | str | `ok | timeout | error` |
+| `scheduler_status` | str | `ok | not_started | not_running | claim_failed | processing_failed | lagging_or_stalled` |
+| `scheduler` | object | 调度器快照（包含连续失败计数） |
+
+---
+
+## 运行脚本接口
+
+### `scripts/preflight.py`
+
+发布前校验脚本，输出 JSON：
+
+```json
+{"ok": true, "errors": [], "warnings": []}
+```
+
+- `errors`: 阻断发布的问题（配置非法、DB 路径不可用、实例锁异常）
+- `warnings`: 非阻断但高风险项（权限过宽、健康检查关闭等）
+
+常用参数：
+
+- `--skip-db-runtime-check`
+- `--instance-lock-enabled true|false`
+- `--healthcheck-enabled true|false`
+- `--healthcheck-host 127.0.0.1`
+- `--healthcheck-port 8080`
+- `--db-quick-check-on-startup true|false`
+- `--strict-warnings`（将 warning 升级为阻断）
+
+### `scripts/backup_db.py`
+
+SQLite 备份脚本：
+
+- 默认执行 `PRAGMA quick_check(1)` 后再备份
+- 备份文件权限默认 `600`
+
+参数：
+
+- `--db` 数据库路径
+- `--out-dir` 备份目录
+- `--keep` 保留备份数量
+- `--skip-quick-check` 跳过备份前完整性校验
+
+### `scripts/restore_db.py`
+
+SQLite 恢复脚本：
+
+- 从备份恢复到目标 DB 前，先保存一份“恢复前快照”
+- 使用临时文件 + 原子替换，降低中断风险
+- 默认恢复前后都执行 `quick_check`
+
+参数：
+
+- `--db` 目标数据库路径
+- `--from` 备份文件路径
+- `--snapshot-dir` 恢复前快照保存目录
+- `--skip-quick-check` 跳过完整性校验（仅应急）
 
 ---
 

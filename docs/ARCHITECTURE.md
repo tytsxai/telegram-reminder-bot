@@ -73,6 +73,7 @@ class Settings(BaseSettings):
     SCHEDULER_BATCH_SIZE: int
     SCHEDULER_LOCK_SECONDS: int
     SCHEDULER_SEND_CONCURRENCY: int
+    SCHEDULER_SEND_TIMEOUT_SECONDS: int
     HEALTHCHECK_ENABLED: bool
     HEALTHCHECK_CHECK_TIMEOUT_SECONDS: float
     DB_QUICK_CHECK_ON_STARTUP: bool
@@ -99,12 +100,13 @@ class Settings(BaseSettings):
 
 调度器在发送前会写入 `send_attempt_for/send_attempt_until`，用于标记“正在发送”
 并在崩溃恢复时减少重复发送。发送成功或停用后会清理该标记。
+同时发送阶段受 `SCHEDULER_SEND_TIMEOUT_SECONDS` 保护，避免外部网络挂死拖垮调度循环。
 
 ## 技术栈
 
 | 组件 | 技术 |
 |------|------|
-| Bot框架 | python-telegram-bot 20.x |
+| Bot框架 | python-telegram-bot 22.x |
 | 调度器 | APScheduler |
 | 数据库 | SQLite + aiosqlite |
 | 配置 | pydantic-settings |
@@ -118,7 +120,7 @@ class Settings(BaseSettings):
 
 - `now_utc()` - 获取当前 UTC 时间
 - `now_in_timezone()` - 获取配置时区的当前时间
-- `to_utc()` / `from_utc()` - 时区转换
+- `to_utc()` / `to_utc_iso()` / `from_utc_iso()` - 时区转换与序列化
 - `add_months()` - 月份加减（处理月末边界）
 
 ### instance_lock
@@ -133,3 +135,12 @@ class Settings(BaseSettings):
 - 使用 `schema_version` 表记录数据库版本。
 - 启动时按版本依次应用迁移（补字段、创建索引）。
 - 新版本只追加迁移步骤，保证向后兼容。
+
+## 生产稳定性设计点
+
+- **单实例保护**：默认启用 `InstanceLock`，防止多实例并发导致重复提醒。
+- **调度容错**：发送前写入 `send_attempt_*`，崩溃恢复后减少重复发送；发送路径带硬超时保护，避免协程挂死。
+- **健康探针**：`/healthz` 同时检查 DB 连通性与调度器健康，避免“进程存活但业务失效”。
+- **启动自检**：`preflight.py` 作为上线前 gate，提前发现配置与运行环境问题。
+- **权限基线**：数据库初始化会尽力将 SQLite 文件权限收敛为 `600`（Windows 除外）。
+- **备份恢复闭环**：`backup_db.py` + `restore_db.py` 支持完整性校验、恢复前快照与原子替换。

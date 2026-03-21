@@ -10,10 +10,12 @@
 
 import asyncio
 import logging
+import time
 
 from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler
 
+from src.config import settings
 from src.database.db import Database
 from src.models.reminder import RepeatType
 from src.services.ai_parser import get_default_parser
@@ -36,6 +38,32 @@ class CommandHandler:
         self.db = db
         self.reminder_service = ReminderService(db)
         self.parser = get_default_parser()
+        # 滑动窗口速率限制：记录每个用户最近的 AI 解析时间戳
+        self._user_timestamps: dict[int, list[float]] = {}
+
+    def _is_rate_limited(self, user_id: int) -> bool:
+        """检查用户是否超出速率限制（滑动窗口 60 秒）"""
+        limit = settings.AI_RATE_LIMIT_PER_MINUTE
+        if limit <= 0:
+            return False
+        now = time.monotonic()
+        cutoff = now - 60.0
+        # 清理该用户 60 秒前的过期记录
+        timestamps = [t for t in self._user_timestamps.get(user_id, []) if t > cutoff]
+        if len(timestamps) >= limit:
+            self._user_timestamps[user_id] = timestamps
+            return True
+        timestamps.append(now)
+        self._user_timestamps[user_id] = timestamps
+        # 防止长期运行累积不活跃用户 key：超过 500 个 key 时驱逐窗口外的条目
+        if len(self._user_timestamps) > 500:
+            cutoff2 = time.monotonic() - 60.0
+            self._user_timestamps = {
+                uid: ts
+                for uid, ts in self._user_timestamps.items()
+                if any(t > cutoff2 for t in ts)
+            }
+        return False
 
     def _format_repeat(self, reminder) -> str:
         if reminder.repeat_type == RepeatType.NONE:
@@ -323,6 +351,9 @@ class CommandHandler:
         if not message or not getattr(message, "text", None):
             return
         text = message.text
+        if self._is_rate_limited(user_id):
+            await self._reply(update, "⚠️ 请求太频繁，请稍后再试")
+            return
         # AI 解析可能触发阻塞式 HTTP，放到线程池避免卡住事件循环。
         result = await self._parse_text(text)
 

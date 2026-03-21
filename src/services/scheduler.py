@@ -7,25 +7,31 @@
 - 用户屏蔽自动停用（Forbidden）
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 from datetime import timedelta
 from typing import Awaitable, Callable, Optional
 
-from telegram.error import BadRequest, Forbidden, RetryAfter
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
+from telegram.error import BadRequest, Forbidden, RetryAfter
+
 from src.config import settings
 from src.database.db import Database
 from src.services.reminder import ReminderService
-from src.utils.time_utils import now_in_timezone, now_utc
 from src.utils.text_utils import truncate_utf16, utf16_length
+from src.utils.time_utils import now_in_timezone, now_utc
 
 logger = logging.getLogger(__name__)
 
 
 class SchedulerService:
     """调度器服务"""
+
+    _MAX_CONSECUTIVE_CLAIM_FAILURES = 3
+    _MAX_CONSECUTIVE_PROCESS_FAILURES = 10
 
     def __init__(
         self,
@@ -41,6 +47,8 @@ class SchedulerService:
         self.batch_size = settings.SCHEDULER_BATCH_SIZE
         self.lock_seconds = settings.SCHEDULER_LOCK_SECONDS
         self.send_concurrency = settings.SCHEDULER_SEND_CONCURRENCY
+        self.send_timeout_seconds = settings.SCHEDULER_SEND_TIMEOUT_SECONDS
+
         # 这些字段用于健康检查与运维排查，避免调度器无声失败。
         self._last_tick_at = None
         self._last_error = None
@@ -48,6 +56,9 @@ class SchedulerService:
         self._error_count = 0
         self._send_success = 0
         self._send_failed = 0
+        self._consecutive_claim_failures = 0
+        self._consecutive_process_failures = 0
+        self._last_success_at = None
 
     def _max_lag_seconds(self) -> int:
         return max(int(self.interval_seconds * 3), 90)
@@ -63,9 +74,36 @@ class SchedulerService:
         safe_content = truncate_utf16(reminder.content, available, suffix=suffix)
         return f"{prefix}{safe_content}"
 
+    def _mark_processing_failure(self, reason: str) -> None:
+        self._error_count += 1
+        self._consecutive_process_failures += 1
+        self._last_error = reason
+
+    async def _delay_retry(self, reminder, *, delay_seconds: int, reason: str) -> None:
+        """设置重试窗口，避免短时间重复认领导致重试风暴。"""
+        now_local = now_in_timezone()
+        desired = now_local + timedelta(seconds=max(delay_seconds, self.lock_seconds))
+        if reminder.locked_until is None or reminder.locked_until < desired:
+            reminder.locked_until = desired
+        reminder.send_attempt_for = reminder.remind_at
+        reminder.send_attempt_until = desired
+        try:
+            await self.db.update_reminder(reminder)
+        except Exception as update_exc:
+            logger.error(
+                "Failed to set retry window for reminder id=%s (%s): %s",
+                reminder.id,
+                reason,
+                update_exc,
+            )
+
     def is_healthy(self) -> bool:
         """判断调度器是否健康。"""
         if not self.scheduler.running:
+            return False
+        if self._consecutive_claim_failures >= self._MAX_CONSECUTIVE_CLAIM_FAILURES:
+            return False
+        if self._consecutive_process_failures >= self._MAX_CONSECUTIVE_PROCESS_FAILURES:
             return False
         if self._last_tick_at is None:
             # 刚启动时允许短暂空窗，避免误报。
@@ -76,12 +114,16 @@ class SchedulerService:
     def health_snapshot(self) -> dict:
         """返回调度器健康快照信息。"""
         last_tick = self._last_tick_at.isoformat() if self._last_tick_at else None
+        last_success = (
+            self._last_success_at.isoformat() if self._last_success_at else None
+        )
         lag_seconds = None
         if self._last_tick_at is not None:
             lag_seconds = max(0, (now_utc() - self._last_tick_at).total_seconds())
         return {
             "running": self.scheduler.running,
             "interval_seconds": self.interval_seconds,
+            "send_timeout_seconds": self.send_timeout_seconds,
             "last_tick_at": last_tick,
             "lag_seconds": lag_seconds,
             "last_error": self._last_error,
@@ -89,6 +131,9 @@ class SchedulerService:
             "error_count": self._error_count,
             "send_success": self._send_success,
             "send_failed": self._send_failed,
+            "last_success_at": last_success,
+            "consecutive_claim_failures": self._consecutive_claim_failures,
+            "consecutive_process_failures": self._consecutive_process_failures,
         }
 
     def start(self):
@@ -106,50 +151,65 @@ class SchedulerService:
         )
         self.scheduler.start()
 
-    def stop(self):
+    def stop(self, wait: bool = True):
         """停止调度器"""
         if self.scheduler.running:
-            self.scheduler.shutdown(wait=False)
+            self.scheduler.shutdown(wait=wait)
 
     async def _check_reminders(self):
         """检查并发送到期提醒"""
         self._last_tick_at = now_utc()
         self._run_count += 1
+        if self._run_count % 100 == 0:
+            await self.db.checkpoint()
         self._last_error = None
         try:
             reminders = await self.db.claim_pending_reminders(
                 self.batch_size, self.lock_seconds
             )
-        except Exception as e:
+        except Exception as exc:
             self._error_count += 1
-            self._last_error = f"claim_failed: {e}"
-            logger.error("获取待发送提醒失败: %s", e)
+            self._consecutive_claim_failures += 1
+            self._last_error = f"claim_failed: {exc}"
+            logger.error("获取待发送提醒失败: %s", exc)
             return
+
+        self._consecutive_claim_failures = 0
         if not reminders:
+            self._consecutive_process_failures = 0
+            self._last_success_at = now_utc()
             return
 
         # 限制并发发送，降低触发限流与阻塞事件循环的风险。
         semaphore = asyncio.Semaphore(self.send_concurrency)
+        processing_failures = 0
 
         async def _process_one(reminder):
+            nonlocal processing_failures
             try:
                 async with semaphore:
                     if reminder.id is not None:
                         try:
                             current = await self.db.get_reminder(reminder.id)
                         except Exception as exc:
+                            processing_failures += 1
+                            self._mark_processing_failure(
+                                f"reload_failed reminder_id={reminder.id}: {exc}"
+                            )
                             logger.error(
                                 "Failed to reload reminder id=%s: %s",
                                 reminder.id,
                                 exc,
                             )
                             return
+
                         if not current or not current.is_active:
                             logger.info(
                                 "Skipping reminder id=%s (deleted or inactive)",
                                 reminder.id,
                             )
                             return
+
                         now_local = now_in_timezone()
                         if current.remind_at > now_local or (
                             current.last_sent_for is not None
@@ -170,13 +230,20 @@ class SchedulerService:
                                 try:
                                     await self.db.update_reminder(current)
                                 except Exception as update_exc:
+                                    processing_failures += 1
+                                    self._mark_processing_failure(
+                                        "clear_lock_failed "
+                                        f"reminder_id={current.id}: {update_exc}"
+                                    )
                                     logger.error(
                                         "Failed to clear lock for reminder id=%s: %s",
                                         current.id,
                                         update_exc,
                                     )
                             return
+
                         reminder = current
+
                     now_local = now_in_timezone()
                     # Mark in-flight attempt before send to reduce duplicate delivery.
                     reminder.locked_until = now_local + timedelta(
@@ -187,49 +254,95 @@ class SchedulerService:
                     try:
                         await self.db.update_reminder(reminder)
                     except Exception as update_exc:
+                        processing_failures += 1
+                        self._mark_processing_failure(
+                            f"mark_attempt_failed reminder_id={reminder.id}: {update_exc}"
+                        )
                         logger.error(
                             "Failed to mark send attempt for reminder id=%s: %s",
                             reminder.id,
                             update_exc,
                         )
                         return
+
                     try:
-                        sent = await self._send_reminder(reminder)
-                        if sent:
-                            sent_at = now_in_timezone()
-                            sent_for = reminder.remind_at
-                            await self.reminder_service.process_reminder(
-                                reminder, sent_at=sent_at, sent_for=sent_for
-                            )
-                            logger.info(
-                                "Processed reminder id=%s user_id=%s chat_id=%s",
-                                reminder.id,
-                                reminder.user_id,
-                                reminder.chat_id,
-                            )
-                    except Exception as e:
-                        # 避免临时失败后立即被再次认领导致重试风暴。
-                        now = now_in_timezone()
-                        desired = now + timedelta(seconds=self.lock_seconds)
-                        if (
-                            reminder.locked_until is None
-                            or reminder.locked_until < desired
-                        ):
-                            reminder.locked_until = desired
-                        reminder.send_attempt_for = reminder.remind_at
-                        reminder.send_attempt_until = desired
-                        try:
-                            await self.db.update_reminder(reminder)
-                        except Exception as update_exc:
-                            logger.error(
-                                "Failed to update lock for reminder id=%s: %s",
-                                reminder.id,
-                                update_exc,
-                            )
-                        logger.error(f"处理提醒 {reminder.id} 失败: {e}")
+                        sent = await asyncio.wait_for(
+                            self._send_reminder(reminder),
+                            timeout=self.send_timeout_seconds,
+                        )
+                    except asyncio.TimeoutError:
+                        self._send_failed += 1
+                        processing_failures += 1
+                        self._mark_processing_failure(
+                            "send_timeout "
+                            f"reminder_id={reminder.id} "
+                            f"timeout={self.send_timeout_seconds}s"
+                        )
+                        await self._delay_retry(
+                            reminder,
+                            delay_seconds=self.lock_seconds,
+                            reason="send_timeout",
+                        )
+                        logger.error(
+                            "Send timeout for reminder id=%s chat_id=%s after %ss",
+                            reminder.id,
+                            reminder.chat_id,
+                            self.send_timeout_seconds,
+                        )
+                        return
+                    except Exception as exc:
+                        processing_failures += 1
+                        self._mark_processing_failure(
+                            f"send_failed reminder_id={reminder.id}: {exc}"
+                        )
+                        await self._delay_retry(
+                            reminder,
+                            delay_seconds=self.lock_seconds,
+                            reason="send_exception",
+                        )
+                        logger.error("处理提醒 %s 失败: %s", reminder.id, exc)
+                        return
+
+                    if not sent:
+                        return
+
+                    sent_at = now_in_timezone()
+                    sent_for = reminder.remind_at
+                    try:
+                        await self.reminder_service.process_reminder(
+                            reminder,
+                            sent_at=sent_at,
+                            sent_for=sent_for,
+                        )
+                    except Exception as exc:
+                        processing_failures += 1
+                        self._mark_processing_failure(
+                            "post_send_process_failed "
+                            f"reminder_id={reminder.id}: {exc}"
+                        )
+                        await self._delay_retry(
+                            reminder,
+                            delay_seconds=self.lock_seconds,
+                            reason="post_send_process_failed",
+                        )
+                        logger.error(
+                            "Failed to finalize reminder id=%s after send: %s",
+                            reminder.id,
+                            exc,
+                        )
+                        return
+
+                    logger.info(
+                        "Processed reminder id=%s user_id=%s chat_id=%s",
+                        reminder.id,
+                        reminder.user_id,
+                        reminder.chat_id,
+                    )
             except Exception as exc:
-                self._error_count += 1
-                self._last_error = f"process_failed: {exc}"
+                processing_failures += 1
+                self._mark_processing_failure(
+                    f"process_failed reminder_id={getattr(reminder, 'id', None)}: {exc}"
+                )
                 logger.exception(
                     "Unexpected scheduler error for reminder id=%s: %s",
                     getattr(reminder, "id", None),
@@ -238,6 +351,16 @@ class SchedulerService:
 
         await asyncio.gather(
             *[_process_one(r) for r in reminders], return_exceptions=True
+        )
+
+        if processing_failures == 0:
+            self._consecutive_process_failures = 0
+            self._last_success_at = now_utc()
+            return
+
+        logger.warning(
+            "Scheduler tick finished with %s processing failures",
+            processing_failures,
         )
 
     async def _send_reminder(self, reminder) -> bool:
@@ -312,7 +435,7 @@ class SchedulerService:
                     update_exc,
                 )
             return False
-        except Exception as e:
+        except Exception as exc:
             self._send_failed += 1
-            logger.error(f"发送提醒到 {reminder.chat_id} 失败: {e}")
+            logger.error("发送提醒到 %s 失败: %s", reminder.chat_id, exc)
             raise

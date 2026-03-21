@@ -1,5 +1,58 @@
 # 变更记录
 
+## [0.3.9] - 2026-02-25
+
+### Changed
+- 配置默认值调整：`HEALTHCHECK_ENABLED` 默认改为 `true`，与生产运行红线一致。
+- 调度器停止策略调整：`SchedulerService.stop()` 默认等待在途任务完成，降低停机窗口的数据不一致风险。
+- docker-compose 新增 `stop_grace_period: 90s`，为优雅停机留足窗口。
+
+### Added
+- preflight 新增健康检查绑定校验：启用健康检查时会预检 `HEALTHCHECK_HOST:HEALTHCHECK_PORT` 是否可绑定。
+- preflight CLI 新增 `--healthcheck-host`、`--healthcheck-port` 参数，便于发布门禁显式校验探针监听地址。
+- preflight 新增 `.env` 重复键告警，减少配置覆盖导致的隐性风险。
+
+### Documentation
+- 同步更新 README、DEPLOYMENT、OPERATIONS、TROUBLESHOOTING、API、DEVELOPMENT、AGENTS。
+
+## [0.3.8] - 2026-02-12
+
+### Added
+- 配置新增 `SCHEDULER_SEND_TIMEOUT_SECONDS`，为单次发送增加硬超时保护
+- 调度器健康快照新增 `consecutive_process_failures`
+
+### Changed
+- 调度器发送流程改为超时可中断，超时后会写入重试窗口避免重试风暴
+- 健康检查 `scheduler_status` 新增 `processing_failed`，用于区分连续处理失败
+- docker-compose 默认 `INSTANCE_LOCK_PATH` 调整为 `/app/data/reminder-bot.lock`，兼容只读根文件系统
+
+### Fixed
+- 修复外部网络挂死时调度循环被长期阻塞的问题
+- 修复容器只读根文件系统下默认实例锁路径可能导致启动失败的问题
+- 数据库初始化新增权限收敛（0600），并修复 preflight 在权限已修复后仍误报 warning 的问题
+
+### Documentation
+- 同步更新 README、部署/运维/故障排查/API/开发文档与 AGENTS
+- 文档新增生产最小基线（strict preflight、健康状态字段、迁移故障安全处置）
+
+## [0.3.7] - 2026-02-12
+
+### Added
+- preflight 新增 `--strict-warnings` 开关，可将 warning 升级为发布阻断
+- CI 新增 preflight gate（配合 strict warnings）
+- 调度器健康快照新增 `consecutive_claim_failures` 与 `last_success_at`
+
+### Changed
+- preflight 对 `BOT_TOKEN` 格式改为强校验（非法格式直接阻断）
+- 健康检查响应新增 `db_status` 与 `scheduler_status`，用于快速定位不健康原因
+
+### Fixed
+- 健康检查内部异常时补充 `503 internal_error` 响应，避免探针悬挂
+- 调度器连续领取任务失败达到阈值时标记不健康，避免“服务看起来活着但实际不可用”
+
+### Documentation
+- 同步更新 README、部署/运维/故障排查文档与 AGENTS 架构索引
+
 ## [0.3.6] - 2026-02-08
 
 ### Added

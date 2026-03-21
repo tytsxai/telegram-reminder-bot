@@ -65,14 +65,18 @@ class Settings(BaseSettings):
     SCHEDULER_BATCH_SIZE: int = 200
     SCHEDULER_LOCK_SECONDS: int = 120
     SCHEDULER_SEND_CONCURRENCY: int = 5
+    SCHEDULER_SEND_TIMEOUT_SECONDS: int = 30
     DROP_PENDING_UPDATES: bool = False
     IMAGE_TAG: Optional[str] = None
     DB_QUICK_CHECK_ON_STARTUP: bool = True
-    HEALTHCHECK_ENABLED: bool = False
+    HEALTHCHECK_ENABLED: bool = True
     HEALTHCHECK_HOST: str = "127.0.0.1"
     HEALTHCHECK_PORT: int = 8080
     HEALTHCHECK_PATH: str = "/healthz"
     HEALTHCHECK_CHECK_TIMEOUT_SECONDS: float = 3.0
+
+    # 用户消息速率限制（每用户每分钟最大 AI 解析次数，0=不限制）
+    AI_RATE_LIMIT_PER_MINUTE: int = 20
 
     # 运行实例锁
     INSTANCE_LOCK_ENABLED: bool = True
@@ -111,6 +115,14 @@ class Settings(BaseSettings):
             raise ValueError("SCHEDULER_SEND_CONCURRENCY must be > 0")
         if self.SCHEDULER_SEND_CONCURRENCY > 50:
             raise ValueError("SCHEDULER_SEND_CONCURRENCY must be <= 50")
+        if self.SCHEDULER_SEND_TIMEOUT_SECONDS <= 0:
+            raise ValueError("SCHEDULER_SEND_TIMEOUT_SECONDS must be > 0")
+        if self.SCHEDULER_SEND_TIMEOUT_SECONDS > 300:
+            raise ValueError("SCHEDULER_SEND_TIMEOUT_SECONDS must be <= 300")
+        if self.SCHEDULER_LOCK_SECONDS < self.SCHEDULER_SEND_TIMEOUT_SECONDS:
+            raise ValueError(
+                "SCHEDULER_LOCK_SECONDS must be >= " "SCHEDULER_SEND_TIMEOUT_SECONDS"
+            )
         if not (1 <= self.HEALTHCHECK_PORT <= 65535):
             raise ValueError("HEALTHCHECK_PORT must be between 1 and 65535")
         if not self.HEALTHCHECK_PATH.startswith("/"):

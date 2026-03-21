@@ -8,15 +8,25 @@ services:
     env_file: .env
     environment:
       DATABASE_PATH: ${DATABASE_PATH:-/app/data/reminders.db}
+      INSTANCE_LOCK_PATH: ${INSTANCE_LOCK_PATH:-/app/data/reminder-bot.lock}
       HEALTHCHECK_ENABLED: ${HEALTHCHECK_ENABLED:-true}
       HEALTHCHECK_HOST: ${HEALTHCHECK_HOST:-0.0.0.0}
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=5)"]
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=5)"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 10s
+      start_period: 60s
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+    stop_grace_period: 90s
+    read_only: true
+    tmpfs:
+      - /tmp
     volumes:
       - reminder-data:/app/data
     networks:

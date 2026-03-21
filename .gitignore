@@ -16,7 +16,9 @@ htmlcov/
 .env
 *.db
 backups/
-*.lock
+# 只排除运行时实例锁文件，不排除依赖 lock 文件（requirements.lock 等）
+reminder-bot.lock
+uv.lock
 
 # IDE
 .idea/

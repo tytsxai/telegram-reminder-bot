@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import os
+import signal
 from pathlib import Path
 from telegram.ext import Application, ContextTypes
 from telegram import BotCommand
@@ -26,13 +27,14 @@ def setup_logging() -> None:
 def log_startup_settings() -> None:
     """记录关键配置（不包含敏感信息）。"""
     logger.info(
-        "Config: timezone=%s db_path=%s scheduler_interval=%s batch=%s lock=%s concurrency=%s",
+        "Config: timezone=%s db_path=%s scheduler_interval=%s batch=%s lock=%s concurrency=%s send_timeout=%ss",
         settings.TIMEZONE,
         settings.DATABASE_PATH,
         settings.SCHEDULER_INTERVAL_SECONDS,
         settings.SCHEDULER_BATCH_SIZE,
         settings.SCHEDULER_LOCK_SECONDS,
         settings.SCHEDULER_SEND_CONCURRENCY,
+        settings.SCHEDULER_SEND_TIMEOUT_SECONDS,
     )
     logger.info(
         "Update handling: drop_pending_updates=%s",
@@ -139,17 +141,39 @@ async def post_init(application: Application):
 
         async def _health_check():
             # 同时检查 DB 与调度器，避免“进程活着但不工作”的情况。
+            db_ok = False
+            db_status = "ok"
             try:
                 db_ok = await asyncio.wait_for(
                     db.ping(), timeout=settings.HEALTHCHECK_CHECK_TIMEOUT_SECONDS
                 )
-            except TimeoutError:
-                db_ok = False
+                if not db_ok:
+                    db_status = "error"
+            except asyncio.TimeoutError:
+                db_status = "timeout"
                 logger.error(
                     "Healthcheck db ping timeout after %.2fs",
                     settings.HEALTHCHECK_CHECK_TIMEOUT_SECONDS,
                 )
+            except Exception as exc:
+                db_status = "error"
+                logger.error("Healthcheck db ping failed: %s", exc)
+
+            scheduler_snapshot = scheduler.health_snapshot() if scheduler else None
             scheduler_ok = scheduler.is_healthy() if scheduler else False
+            scheduler_status = "ok"
+            if not scheduler_ok:
+                if scheduler_snapshot is None:
+                    scheduler_status = "not_started"
+                elif not scheduler_snapshot.get("running", False):
+                    scheduler_status = "not_running"
+                elif scheduler_snapshot.get("consecutive_claim_failures", 0) >= 3:
+                    scheduler_status = "claim_failed"
+                elif scheduler_snapshot.get("consecutive_process_failures", 0) >= 10:
+                    scheduler_status = "processing_failed"
+                else:
+                    scheduler_status = "lagging_or_stalled"
+
             ok = db_ok and scheduler_ok
             if not db_ok:
                 status = "db_error"
@@ -161,8 +185,10 @@ async def post_init(application: Application):
                 "ok": ok,
                 "status": status,
                 "db_ok": db_ok,
+                "db_status": db_status,
                 "scheduler_ok": scheduler_ok,
-                "scheduler": scheduler.health_snapshot() if scheduler else None,
+                "scheduler_status": scheduler_status,
+                "scheduler": scheduler_snapshot,
             }
             return payload
 
@@ -213,6 +239,13 @@ async def post_shutdown(application: Application):
 
 async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     """统一错误处理，避免异常导致请求无响应。"""
+    from telegram.error import NetworkError
+
+    if isinstance(context.error, NetworkError):
+        # 网络抖动属于瞬态错误，降级为 warning 避免告警噪音。
+        logger.warning("Network error (transient): %s", context.error)
+        return
+
     logger.exception("Unhandled error: %s", context.error)
     message = getattr(update, "effective_message", None)
     if message:
@@ -252,8 +285,15 @@ def main():
 
     logger.info("Bot starting...")
     try:
+        # Ensure graceful stop on SIGTERM in supervisors/containers.
+        stop_signals = [signal.SIGINT, signal.SIGTERM]
+        if hasattr(signal, "SIGABRT"):
+            stop_signals.append(signal.SIGABRT)
         # 可选丢弃积压更新，避免长时间宕机后消息洪峰。
-        app.run_polling(drop_pending_updates=settings.DROP_PENDING_UPDATES)
+        app.run_polling(
+            drop_pending_updates=settings.DROP_PENDING_UPDATES,
+            stop_signals=tuple(stop_signals),
+        )
     finally:
         if instance_lock:
             instance_lock.release()

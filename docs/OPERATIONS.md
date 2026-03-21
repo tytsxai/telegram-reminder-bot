@@ -26,24 +26,45 @@ docker-compose down
 docker-compose logs -f
 ```
 
+`docker-compose.yml` 已设置 `stop_grace_period: 90s`，用于给调度器在途任务留出优雅停机时间。
+
 ## 运行检查清单
 
 - `.env` 已配置并可读取
 - `BOT_TOKEN` 正确
 - `DATABASE_PATH` 指向可写路径
+- 数据库文件权限为 `600`（启动后会自动收敛，仍建议人工核验）
 - 启动日志出现 `Database quick check passed`
 - Docker 部署已挂载持久化卷（/app/data）
 - 仅单实例运行（默认启用实例锁）
 - 已确认是否需要丢弃积压更新（`DROP_PENDING_UPDATES`）
-- 健康检查开启（可选）
+- 健康检查开启（生产建议必开）
 
 上线前建议执行：
 
 ```bash
-python scripts/preflight.py
+python scripts/preflight.py \
+  --healthcheck-enabled true \
+  --healthcheck-host 127.0.0.1 \
+  --healthcheck-port 8080 \
+  --db-quick-check-on-startup true \
+  --instance-lock-enabled true
 ```
 
 返回 `{"ok": true}` 才继续发布。
+
+建议在 CI/CD 使用严格模式：
+
+```bash
+python scripts/preflight.py --strict-warnings
+```
+
+补充要求：
+
+- 若 `warnings` 非空，必须在发布记录中写明评估结果。
+- 建议将 `preflight` 输出存档到发布工单（便于审计与回溯）。
+- 若启用健康检查，`preflight` 会校验 `HEALTHCHECK_HOST:HEALTHCHECK_PORT` 可绑定，端口冲突会直接阻断发布。
+- 若 `.env` 存在重复键（例如同一键配置多次），`preflight` 会发出 warning，需先清理避免“最后一条覆盖前值”的隐性配置偏差。
 
 ## 备份
 
@@ -51,6 +72,12 @@ python scripts/preflight.py
 
 ```bash
 python scripts/backup_db.py --db /path/to/reminders.db --out-dir /var/backups/reminder --keep 7
+```
+
+默认会先执行 `quick_check`。如数据库已损坏且需先做取证备份，可临时加：
+
+```bash
+python scripts/backup_db.py --db /path/to/reminders.db --out-dir /var/backups/reminder --keep 7 --skip-quick-check
 ```
 
 Docker 部署可在容器内执行：
@@ -115,19 +142,48 @@ systemctl enable --now reminder-bot-backup.timer
 ## 恢复
 
 1) 停止服务
-2) 用最近备份替换数据库文件
+2) 使用恢复脚本执行原子替换（自动保留恢复前快照）
 3) 启动服务
 
 示例：
 
 ```bash
-cp /var/backups/reminder/reminders_20250101_020000.db /path/to/reminders.db
+python scripts/restore_db.py \
+  --db /path/to/reminders.db \
+  --from /var/backups/reminder/reminders_20250101_020000.db \
+  --snapshot-dir /var/backups/reminder/pre-restore
+```
+
+恢复后校验：
+
+```bash
+python scripts/preflight.py --bot-token "$BOT_TOKEN" --db-path /path/to/reminders.db
 ```
 
 ## 回滚
 
 - 代码回滚：使用 git tag 或发布包回滚
-- 数据回滚：用备份文件替换数据库
+- 数据回滚：优先使用 `restore_db.py` 指定回滚备份
+
+## 发布检查与回滚清单（建议执行）
+
+发布前：
+
+1. 执行 `python scripts/preflight.py` 并归档输出
+2. 确认最近备份在预期时间窗口内可用
+3. 记录本次发布版本（镜像 tag / git commit）
+
+发布后（5-10 分钟内）：
+
+1. 检查健康端点 `ok=true`
+2. 检查日志无持续 `ERROR`
+3. 人工验证至少 1 条提醒可创建并按时触发
+
+回滚触发条件（示例）：
+
+- 连续 5 分钟健康检查失败
+- 提醒发送成功率明显下降且无法快速恢复
+- 启动后持续出现数据库完整性/锁异常
 
 ## 健康检查
 
@@ -145,13 +201,20 @@ curl http://127.0.0.1:8080/healthz
 - 单请求头数量有限制（默认最多 100 行），超过会返回 `400 too_many_headers`。
 - 健康检查内部 DB ping 有独立超时（`HEALTHCHECK_CHECK_TIMEOUT_SECONDS`），超时后返回 `db_error`。
 
-健康检查响应会包含调度器状态与延迟信息（`scheduler_ok`/`scheduler`），
-当调度器卡住或停止时会返回 `scheduler_unhealthy`。
+健康检查响应会包含以下关键字段：
+
+- `db_status`: `ok | timeout | error`
+- `scheduler_status`: `ok | not_started | not_running | claim_failed | processing_failed | lagging_or_stalled`
+- `scheduler`: 调度器快照（含 `consecutive_claim_failures`、`consecutive_process_failures`、`last_success_at`）
+
+当调度器卡住、停止、连续领取失败（阈值 3）或连续处理失败（阈值 10）时会返回 `scheduler_unhealthy`。
 
 ## 关键告警与处置
 
 - `status=db_error`：优先检查数据库文件权限、磁盘空间、I/O 错误；必要时从最近备份恢复。
-- `status=scheduler_unhealthy`：先重启进程；若持续复发，检查事件循环阻塞与 Telegram API 异常。
+- `status=scheduler_unhealthy`：先重启进程；若 `scheduler_status=claim_failed`，优先排查数据库可用性与锁冲突。
+- `scheduler_status=processing_failed`：说明提醒处理连续失败，优先检查 Telegram 网络、发送超时与下游 API 可用性。
+- `scheduler_status=lagging_or_stalled`：检查事件循环是否被阻塞、外部 API 是否持续超时。
 - 启动失败且日志包含 `database quick check failed`：停止自动重启，执行 SQLite 完整检查并走恢复流程。
 
 ## 日志管理
@@ -226,6 +289,7 @@ groups:
 | SCHEDULER_BATCH_SIZE | 200 | 根据内存调整，建议 100-500 |
 | SCHEDULER_LOCK_SECONDS | 120 | 应大于单批处理时间 |
 | SCHEDULER_SEND_CONCURRENCY | 5 | 避免触发 Telegram 限流 |
+| SCHEDULER_SEND_TIMEOUT_SECONDS | 30 | 单次发送超时保护，建议 15-60 |
 
 ### SQLite 优化
 

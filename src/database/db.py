@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import os
+import stat
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -50,6 +51,22 @@ class Database:
         if parent and str(parent) not in (".", ""):
             os.makedirs(parent, exist_ok=True)
 
+    def _harden_db_permissions(self) -> None:
+        """Best-effort permission hardening for SQLite file."""
+        if os.name == "nt":
+            return
+        if not self.db_path or self.db_path == ":memory:":
+            return
+        path = Path(self.db_path).expanduser()
+        if not path.exists() or not path.is_file():
+            return
+        try:
+            current = stat.S_IMODE(path.stat().st_mode)
+            if current & 0o077:
+                path.chmod(0o600)
+        except Exception as exc:
+            logger.warning("Failed to harden database file permissions: %s", exc)
+
     async def _configure_connection(self, db: aiosqlite.Connection) -> None:
         try:
             await db.execute("PRAGMA journal_mode=WAL")
@@ -82,6 +99,14 @@ class Database:
             return True
         except Exception:
             return False
+
+    async def checkpoint(self) -> None:
+        """触发 WAL checkpoint，防止 WAL 文件无限增长。"""
+        try:
+            async with self._connect() as db:
+                await db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        except Exception as exc:
+            logger.warning("WAL checkpoint failed: %s", exc)
 
     async def quick_check(self) -> bool:
         """执行 SQLite 快速完整性检查。"""
@@ -126,6 +151,7 @@ class Database:
             )
             await self._apply_migrations(db)
             await db.commit()
+        self._harden_db_permissions()
 
     async def _apply_migrations(self, db: aiosqlite.Connection) -> None:
         """按版本应用迁移"""

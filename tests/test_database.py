@@ -35,6 +35,20 @@ class TestDatabase:
         assert db_path.exists()
 
     @pytest.mark.asyncio
+    async def test_init_db_hardens_file_permissions(self, tmp_path):
+        if os.name == "nt":
+            pytest.skip("permission mode bits are not portable on Windows")
+        db_path = tmp_path / "secure.db"
+        db = Database(str(db_path))
+        await db.init_db()
+        db_path.chmod(0o644)
+
+        await db.init_db()
+
+        mode = db_path.stat().st_mode & 0o777
+        assert mode == 0o600
+
+    @pytest.mark.asyncio
     async def test_ping(self, db):
         await db.init_db()
         assert await db.ping() is True

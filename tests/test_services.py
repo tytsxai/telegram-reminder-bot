@@ -1,5 +1,7 @@
 """服务测试"""
 
+import asyncio
+
 import pytest
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock
@@ -156,7 +158,7 @@ class TestSchedulerService:
         scheduler.scheduler.start.assert_called_once()
         scheduler.scheduler.running = True
         scheduler.stop()
-        scheduler.scheduler.shutdown.assert_called_once_with(wait=False)
+        scheduler.scheduler.shutdown.assert_called_once_with(wait=True)
 
     def test_start_skips_when_running(self, db):
         scheduler = SchedulerService(db)
@@ -182,6 +184,53 @@ class TestSchedulerService:
         assert len(sent) == 1
 
     @pytest.mark.asyncio
+    async def test_scheduler_becomes_unhealthy_after_consecutive_claim_failures(
+        self, db
+    ):
+        await db.init_db()
+        scheduler = SchedulerService(db)
+        scheduler.scheduler = MagicMock()
+        scheduler.scheduler.running = True
+
+        async def _raise_once(*_args, **_kwargs):
+            raise RuntimeError("db down")
+
+        scheduler.db.claim_pending_reminders = _raise_once
+
+        for _ in range(3):
+            await scheduler._check_reminders()
+
+        snapshot = scheduler.health_snapshot()
+        assert scheduler.is_healthy() is False
+        assert snapshot["consecutive_claim_failures"] == 3
+        assert "claim_failed" in (snapshot["last_error"] or "")
+
+    @pytest.mark.asyncio
+    async def test_scheduler_claim_failure_counter_resets_after_success(self, db):
+        await db.init_db()
+        scheduler = SchedulerService(db)
+        scheduler.scheduler = MagicMock()
+        scheduler.scheduler.running = True
+
+        async def _raise_once(*_args, **_kwargs):
+            raise RuntimeError("temporary db error")
+
+        scheduler.db.claim_pending_reminders = _raise_once
+        await scheduler._check_reminders()
+        assert scheduler.health_snapshot()["consecutive_claim_failures"] == 1
+
+        async def _ok(*_args, **_kwargs):
+            return []
+
+        scheduler.db.claim_pending_reminders = _ok
+        await scheduler._check_reminders()
+
+        snapshot = scheduler.health_snapshot()
+        assert scheduler.is_healthy() is True
+        assert snapshot["consecutive_claim_failures"] == 0
+        assert snapshot["last_success_at"] is not None
+
+    @pytest.mark.asyncio
     async def test_check_reminders_forbidden_deactivates(self, db):
         await db.init_db()
 
@@ -198,3 +247,58 @@ class TestSchedulerService:
         updated = await db.get_reminder(created.id)
         assert updated is not None
         assert updated.is_active is False
+
+    @pytest.mark.asyncio
+    async def test_check_reminders_timeout_sets_retry_window(self, db):
+        await db.init_db()
+
+        async def callback(chat_id, msg):
+            await asyncio.sleep(0.05)
+
+        scheduler = SchedulerService(db, callback)
+        scheduler.send_timeout_seconds = 0.01
+        scheduler.lock_seconds = 1
+
+        past = now_in_timezone() - timedelta(hours=1)
+        r = Reminder(user_id=123, chat_id=456, content="超时", remind_at=past)
+        created = await db.create_reminder(r)
+
+        await scheduler._check_reminders()
+
+        updated = await db.get_reminder(created.id)
+        assert updated is not None
+        assert updated.is_active is True
+        assert updated.locked_until is not None
+        assert updated.send_attempt_for == updated.remind_at
+        assert updated.send_attempt_until is not None
+        snapshot = scheduler.health_snapshot()
+        assert snapshot["send_failed"] >= 1
+        assert snapshot["consecutive_process_failures"] >= 1
+
+    @pytest.mark.asyncio
+    async def test_scheduler_unhealthy_after_consecutive_process_failures(self, db):
+        await db.init_db()
+        scheduler = SchedulerService(db)
+        scheduler.scheduler = MagicMock()
+        scheduler.scheduler.running = True
+
+        due = now_in_timezone() - timedelta(minutes=1)
+        reminder = Reminder(
+            id=1, user_id=123, chat_id=456, content="失败", remind_at=due
+        )
+
+        async def _claim(*_args, **_kwargs):
+            return [reminder]
+
+        async def _reload(*_args, **_kwargs):
+            raise RuntimeError("db reload failed")
+
+        scheduler.db.claim_pending_reminders = _claim
+        scheduler.db.get_reminder = _reload
+
+        for _ in range(10):
+            await scheduler._check_reminders()
+
+        snapshot = scheduler.health_snapshot()
+        assert snapshot["consecutive_process_failures"] >= 10
+        assert scheduler.is_healthy() is False

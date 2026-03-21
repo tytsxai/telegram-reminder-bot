@@ -33,6 +33,7 @@ class TestSettings:
             "SCHEDULER_BATCH_SIZE",
             "SCHEDULER_LOCK_SECONDS",
             "SCHEDULER_SEND_CONCURRENCY",
+            "SCHEDULER_SEND_TIMEOUT_SECONDS",
             "DROP_PENDING_UPDATES",
             "DB_QUICK_CHECK_ON_STARTUP",
             "HEALTHCHECK_ENABLED",
@@ -68,10 +69,11 @@ class TestSettings:
         assert s.SCHEDULER_BATCH_SIZE == 200
         assert s.SCHEDULER_LOCK_SECONDS == 120
         assert s.SCHEDULER_SEND_CONCURRENCY == 5
+        assert s.SCHEDULER_SEND_TIMEOUT_SECONDS == 30
         assert s.DROP_PENDING_UPDATES is False
         assert s.DB_QUICK_CHECK_ON_STARTUP is True
         assert s.IMAGE_TAG is None
-        assert s.HEALTHCHECK_ENABLED is False
+        assert s.HEALTHCHECK_ENABLED is True
         assert s.HEALTHCHECK_HOST == "127.0.0.1"
         assert s.HEALTHCHECK_PORT == 8080
         assert s.HEALTHCHECK_PATH == "/healthz"
@@ -187,6 +189,39 @@ class TestSettingsInstance:
             with pytest.raises(Exception) as excinfo:
                 Settings()
             assert "SCHEDULER_SEND_CONCURRENCY" in str(excinfo.value)
+
+    def test_scheduler_send_timeout_invalid(self):
+        """测试非法发送超时"""
+        with patch.dict(os.environ, {"SCHEDULER_SEND_TIMEOUT_SECONDS": "0"}):
+            from src.config import Settings
+
+            with pytest.raises(Exception) as excinfo:
+                Settings()
+            assert "SCHEDULER_SEND_TIMEOUT_SECONDS" in str(excinfo.value)
+
+    def test_scheduler_send_timeout_too_large(self):
+        """测试发送超时上限"""
+        with patch.dict(os.environ, {"SCHEDULER_SEND_TIMEOUT_SECONDS": "301"}):
+            from src.config import Settings
+
+            with pytest.raises(Exception) as excinfo:
+                Settings()
+            assert "SCHEDULER_SEND_TIMEOUT_SECONDS" in str(excinfo.value)
+
+    def test_scheduler_lock_less_than_send_timeout(self):
+        """测试锁时间必须覆盖发送超时"""
+        with patch.dict(
+            os.environ,
+            {
+                "SCHEDULER_LOCK_SECONDS": "20",
+                "SCHEDULER_SEND_TIMEOUT_SECONDS": "30",
+            },
+        ):
+            from src.config import Settings
+
+            with pytest.raises(Exception) as excinfo:
+                Settings()
+            assert "SCHEDULER_LOCK_SECONDS" in str(excinfo.value)
 
     def test_healthcheck_port_invalid_low(self):
         """测试非法端口号（过低）"""

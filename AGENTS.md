@@ -30,10 +30,12 @@
 │   ├── backup_db.py             # SQLite 备份（含 quick_check）
 │   └── restore_db.py            # SQLite 恢复（先快照再原子替换）
 ├── docs/
+│   ├── API.md                   # 内部 API 接口文档
+│   ├── ARCHITECTURE.md          # 架构说明
 │   ├── DEPLOYMENT.md            # 部署与发布前检查
+│   ├── DEVELOPMENT.md           # 开发者指南
 │   ├── OPERATIONS.md            # 运行手册、告警、回滚
-│   ├── TROUBLESHOOTING.md       # 故障排查
-│   └── ARCHITECTURE.md          # 架构说明
+│   └── TROUBLESHOOTING.md       # 故障排查
 ├── tests/                       # 单元/集成测试
 ├── Dockerfile                   # 容器镜像定义（非 root）
 └── docker-compose.yml           # 运行编排与健康检查

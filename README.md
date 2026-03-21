@@ -6,7 +6,7 @@
 
 - 自然语言解析：直接发送"明天9点提醒我开会"
 - 重复提醒：支持每日/每周/每月重复
-- 命令操作：/remind、/list（支持分页）、/delete
+- 命令操作：/remind、/list（支持分页）、/delete、/cancel
 - AI 接口预留：可扩展 OpenAI/Claude 解析能力
 - 定时调度：自动发送到期提醒
 
@@ -72,6 +72,9 @@ SCHEDULER_SEND_CONCURRENCY=5
 SCHEDULER_SEND_TIMEOUT_SECONDS=30
 DROP_PENDING_UPDATES=false
 DB_QUICK_CHECK_ON_STARTUP=true
+
+# 速率限制（可选，0=不限制，默认20次/分钟/用户）
+AI_RATE_LIMIT_PER_MINUTE=20
 
 # 监控端点（可选）
 HEALTHCHECK_ENABLED=true
@@ -139,6 +142,7 @@ python scripts/preflight.py \
 | `/remind` | 设置提醒 | `/remind 明天9点提醒我开会` |
 | `/list` | 查看提醒列表（可分页） | `/list 1` |
 | `/delete` | 删除提醒（支持交互输入 ID） | `/delete 1` |
+| `/cancel` | 取消当前交互（如删除确认流程） | `/cancel` |
 
 ### 自然语言示例
 

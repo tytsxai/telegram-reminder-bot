@@ -154,6 +154,7 @@ class OpenAIParser(AIParser):
 | HEALTHCHECK_CHECK_TIMEOUT_SECONDS | 否 | 健康检查内部 DB ping 超时秒数（默认 3） |
 | INSTANCE_LOCK_ENABLED | 否 | 是否启用实例锁（默认开启） |
 | INSTANCE_LOCK_PATH | 否 | 实例锁文件路径 |
+| AI_RATE_LIMIT_PER_MINUTE | 否 | AI 解析速率限制（次/分钟/用户，0=不限制，默认 20） |
 
 约束说明：
 

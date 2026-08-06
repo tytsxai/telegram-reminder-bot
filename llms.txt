@@ -1,0 +1,60 @@
+# telegram-reminder-bot · 智能提醒机器人
+
+> LLM / AI-search summary for https://github.com/tytsxai/telegram-reminder-bot
+
+Self-hosted **Telegram reminder bot** with Chinese natural-language time parsing, one-shot and recurring reminders (daily/weekly/monthly), scheduler delivery, optional AI providers (SiliconFlow / OpenAI / Anthropic), health checks, instance lock, preflight, and SQLite backup/restore.
+
+## Positioning
+
+- Chinese: 开源自托管 Telegram 智能提醒机器人。
+- English: Self-hosted Telegram reminder bot with NLP-style Chinese time parsing and recurrence.
+- Audience: personal users, bot operators, Python developers.
+- Stack: Python 3.11+, python-telegram-bot, APScheduler, aiosqlite, pydantic-settings, pytz.
+- Entry: `python main.py`
+- Repository: https://github.com/tytsxai/telegram-reminder-bot
+- License: MIT
+
+## What it can do
+
+- Parse phrases like “明天上午9点提醒我开会”, “每天8点…”, “每周一…”, “每月1号…”.
+- Commands: `/remind`, `/list` (pagination), `/delete`, `/cancel`, `/start`, `/help`.
+- Scheduler with configurable interval, batch size, send concurrency, locks.
+- Optional AI rate limit and multi-provider keys.
+- `GET /healthz` when healthcheck enabled; `scripts/preflight.py` gate.
+
+## What it does NOT do
+
+- Not a full calendar/sync product (no Google Calendar integration in-repo).
+- Not multi-tenant SaaS; one deployment owns its SQLite DB and bot token.
+- AI is optional enhancement, not required for basic Chinese rule parsing.
+
+## Key config
+
+- Required: `BOT_TOKEN`
+- Common: `TIMEZONE`, `DATABASE_PATH` (or legacy `DATABASE_URL`)
+- Ops: `HEALTHCHECK_*`, `INSTANCE_LOCK_*`, `SCHEDULER_*`, `AI_*` / `OPENAI_*` / `ANTHROPIC_*`
+- See `.env.example`
+
+## Key docs
+
+- [README.md](README.md)
+- [docs/API.md](docs/API.md)
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
+- [docs/OPERATIONS.md](docs/OPERATIONS.md)
+- [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)
+
+## Quick start
+
+```bash
+git clone https://github.com/tytsxai/telegram-reminder-bot.git
+cd telegram-reminder-bot
+pip install -r requirements.txt
+cp .env.example .env
+python scripts/preflight.py
+python main.py
+```
+
+## Search keywords
+
+Telegram reminder bot, Telegram 提醒机器人, natural language reminder Chinese, recurring reminder bot, APScheduler Telegram bot, self-hosted reminder
